@@ -22,11 +22,47 @@ def perform(self):
     self.rename_temp_cert()
 */
 
+//-----------------------------     Certificate crunch     ---------------------------------------------
+struct CertificateRequest {
+    server:String,
+    client_id:String,
+    key_file_name:String,
+    csr_file_name:String,
+    crt_temp_file_name:String,
+    crt_file_name:String,
+    ca_cert_file_name:String,
+}
+
 fn certificate_request(server:String, client_id:String) -> Result<String, Box<dyn std::error::Error>> {
     println!("Server: {} client_id: {}", server, client_id);
+
+    // Create request info
+    let request_info = CertificateRequest{  server:server.clone(), 
+                                            client_id:client_id.clone(),
+                                            key_file_name:format!("{}{}",client_id,".key"),
+                                            csr_file_name:format!("{}{}",client_id,".csr"),
+                                            crt_temp_file_name:format!("{}{}",client_id,".temp"),
+                                            crt_file_name:format!("{}{}",client_id,".crt"),
+                                            ca_cert_file_name:format!("{}{}",client_id,".cacert"),
+                                            };
+
+    ensure_ca_cert_available(&request_info)?;
+
     Ok("Received Certificate".into())
 }
 
+use std::path::Path;
+fn ensure_ca_cert_available(req:&CertificateRequest) -> Result<(), Box<dyn std::error::Error>> {
+    let url = format!("https://{}/root.crt", req.server);
+
+    if !Path::new(&req.ca_cert_file_name).exists() {
+        println!("Attempting to fetch CA cert"); // TODO change to logging
+        //Setup session with url
+    }
+    Ok(())
+}
+
+// ---------------------------   Main process and input   ------------------------------------------
 #[derive(Debug)]
 struct InputError {
     program: String,
@@ -55,14 +91,6 @@ fn read_cmd_input() -> Result<(String, String), InputError>{
     }
 }
 
-/*
-#[test]
-fn test_input() {
-    assert_eq!(read_cmd_input().unwrap_err(),
-               InputError {program:"./caramel-client".into()});
-}
-*/
-
 fn main() -> Result<(), Box<dyn std::error::Error>>{
 
     let (server, client_id) = match read_cmd_input() {
@@ -85,10 +113,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         println!("Certificate Success");
         Ok(())
     }
-
-}
-
-#[cfg(test)]
-mod tests {
 
 }
