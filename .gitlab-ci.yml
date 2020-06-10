@@ -23,7 +23,8 @@ test:cargo:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
 
-  only:
-    refs:
-      - master
-      - tags
+#  Restrictions to run only on master and tags if necessary
+#  only:
+#    refs:
+#      - master
+#      - tags
