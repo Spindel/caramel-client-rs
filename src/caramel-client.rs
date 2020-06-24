@@ -1,3 +1,8 @@
+use std::io::{stdout, Write};
+use std::fs::File;
+use std::path::Path;
+use curl::easy::Easy;
+
 // pseudo code from Python of current application flow of caramel-clint
 /*
 def __init__(self, *, server, client_id):
@@ -48,17 +53,38 @@ fn certificate_request(server:String, client_id:String) -> Result<String, Box<dy
 
     ensure_ca_cert_available(&request_info)?;
 
+
     Ok("Received Certificate".into())
 }
 
-use std::path::Path;
 fn ensure_ca_cert_available(req:&CertificateRequest) -> Result<(), Box<dyn std::error::Error>> {
-    let url = format!("https://{}/root.crt", req.server);
+    let path = Path::new(&req.ca_cert_file_name);
 
-    if !Path::new(&req.ca_cert_file_name).exists() {
-        println!("Attempting to fetch CA cert"); // TODO change to logging
-        //Setup session with url
-    }
+    if !path.exists() {
+        let url = format!("https://{}/root.crt", req.server);  
+        println!("Attempting to fetch CA cert from {}", url);
+
+        let mut handle = Easy::new();
+
+        handle.url(&url).unwrap();
+        handle.write_function(|data| {
+            stdout().write_all(data).unwrap();
+            Ok(data.len())
+        }).unwrap();
+        handle.perform().unwrap();
+        
+        let display = path.display();
+        let mut file = match File::create(&path) {
+            Err(why) => panic!("couldn't create {}: {}", display, why),
+            Ok(file) => file,
+        };
+        let mut transfer2 = handle.transfer();
+        transfer2.write_function(|data| {
+            file.write_all(data).unwrap();
+            Ok(data.len())
+        }).unwrap();
+        transfer2.perform().unwrap();
+   }
     Ok(())
 }
 
