@@ -1,3 +1,8 @@
+use curl::easy::Easy;
+use std::fs::File;
+use std::io::{stdout, Write};
+use std::path::Path;
+
 pub fn fetch_root_cert(url: String, _filename: &String) -> Result<(), String> {
     // 1. connect to server
     // 2. Verify that TLS checks are _enabled_
@@ -19,4 +24,42 @@ pub fn get_crt(_url: &String, _csrfile: &String) -> Result<String, String> {
     //     Other return codes? Treat as an error
     //
     Err("get_crt is not implemented".to_owned())
+}
+
+pub fn ensure_ca_cert_available(
+    server: &String,
+    filename: &String,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new(filename);
+
+    if !path.exists() {
+        let url = format!("https://{}/root.crt", server);
+        println!("Attempting to fetch CA cert from {}", url);
+
+        let mut handle = Easy::new();
+
+        handle.url(&url).unwrap();
+        handle
+            .write_function(|data| {
+                stdout().write_all(data).unwrap();
+                Ok(data.len())
+            })
+            .unwrap();
+        handle.perform().unwrap();
+
+        let display = path.display();
+        let mut file = match File::create(&path) {
+            Err(why) => panic!("couldn't create {}: {}", display, why),
+            Ok(file) => file,
+        };
+        let mut transfer2 = handle.transfer();
+        transfer2
+            .write_function(|data| {
+                file.write_all(data).unwrap();
+                Ok(data.len())
+            })
+            .unwrap();
+        transfer2.perform().unwrap();
+    }
+    Ok(())
 }

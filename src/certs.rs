@@ -214,7 +214,7 @@ Replaced: '{:?}'",
 /// ex.  Converts  from
 ///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = Caramel Signing Certificate`
 /// to
-///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9` 
+///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9`
 /// It passes through all data-points _except_ CommonName, which gets set to `client_id`
 /// This code works with OpenSSL datatypes and errors
 fn make_inner_subject(ca_subject: X509Name, clientid: &String) -> Result<X509Name, ErrorStack> {
