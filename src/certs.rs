@@ -6,7 +6,7 @@ pub fn verify_cacert(_filename: &String) -> Result<(), String> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
-    Err("No can do".to_owned())
+    Err("verify_cacert is not implemented.".to_owned())
 }
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
@@ -17,7 +17,7 @@ pub fn verify_private_key(_filename: &String) -> Result<(), String> {
     /*
         openssl pkey -noout -in $filename
     */
-    Err("No can do".to_owned())
+    Err("verify_key is not implemented".to_owned())
 }
 
 /// Create a new private key and save it to filename
@@ -29,7 +29,7 @@ pub fn create_private_key(_filename: &String) -> Result<(), String> {
     */
     let rsa = Rsa::generate(2048).unwrap();
     let _pkey = PKey::from_rsa(rsa).unwrap();
-    Err("Not implemented".to_owned())
+    Err("create_private_key is not implemented".to_owned())
 }
 
 /// Create a subject from a CAcert + our expected clientid
@@ -62,14 +62,14 @@ fn make_subject(_cacert_filename: &String, _clientid: &String) -> Result<String,
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
-    Err("Not implemented".to_owned())
+    Err("make_subject is not implemented".to_owned())
 }
 
 pub fn verify_csr(_csrfile: &String, _keyfile: &String) -> Result<String, String> {
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
-    Err("Not implemented".to_owned())
+    Err("verify_csr is implemented".to_owned())
 }
 
 /// Verify that the cert we downloaded matches what we want
@@ -80,7 +80,7 @@ pub fn verfiy_cert(_temp_cert: &String, _ca_cert_file_name: &String) -> Result<S
     /*
      * openssl verify -CAfile ca_cert_file_name, temp_cert_file_name
      */
-    Err("Not implemented".to_owned())
+    Err("verify_cert is not implemented".to_owned())
 }
 
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
@@ -140,5 +140,5 @@ pub fn make_csr_request(_indata: &String, _clientid: &String) -> Result<String, 
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
     make_subject(&"place_holder".to_owned(), &"place_holder".to_owned())?;
-    Err("Not implemented".to_owned())
+    Err("make_csr_request is not implemented".to_owned())
 }

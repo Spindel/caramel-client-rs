@@ -6,7 +6,7 @@ pub fn fetch_root_cert(url: String, _filename: &String) -> Result<(), String> {
     // 4. Download the cert, save to temp file
     // 5. atomically move temp cert to our filename
     println!("Attempting to fetch CA cert from {}", url);
-    Err("Not implemnted".to_owned())
+    Err("fetch_root_cert is not implemnted".to_owned())
 }
 
 pub fn get_crt(_url: &String, _csrfile: &String) -> Result<String, String> {
@@ -18,5 +18,5 @@ pub fn get_crt(_url: &String, _csrfile: &String) -> Result<String, String> {
     //
     //     Other return codes? Treat as an error
     //
-    Err("Not implenented".to_owned())
+    Err("get_crt is not implenented".to_owned())
 }
