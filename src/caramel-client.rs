@@ -1,28 +1,5 @@
 mod certs;
-
-// pseudo code from Python of current application flow of caramel-clint
-/*
-def __init__(self, *, server, client_id):
-    self.server = server
-    self.client_id = client_id
-    self.key_file_name = client_id + '.key'
-    self.csr_file_name = client_id + '.csr'
-    self.crt_temp_file_name = client_id + '.tmp'
-    self.crt_file_name = client_id + '.crt'
-    self.ca_cert_file_name = server + '.cacert'
-
-def perform(self):
-    self.assert_openssl_available()
-    self.ensure_ca_cert_available()
-    self.assert_ca_cert_available()
-    self.assert_ca_cert_verifies()
-    subject = self.get_subject()
-    self.ensure_valid_key_file()
-    self.ensure_valid_csr_file(subject)
-    self.request_cert_from_server()
-    self.assert_temp_cert_verifies()
-    self.rename_temp_cert()
-*/
+mod network;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 struct CertificateRequest {
@@ -49,22 +26,22 @@ impl CertificateRequest {
     }
 
     pub fn ensure_cacert(&self) -> Result<(), String> {
-        /// should perform:
-        /// 1. Test for cacert
-        /// 2. Download root.crt and save to cacert if not.
-        /// 3. Verify cacert can be loaded
+        // should perform:
+        // 1. Test for cacert
+        // 2. Download root.crt and save to cacert if not.
+        // 3. Verify cacert can be loaded
         let url = format!("https://{}/root.crt", self.server);
         if !Path::new(&self.ca_cert_file_name).exists() {
-            println!("Attempting to fetch CA cert from {}", url); // TODO change to logging
-                                                                  //Setup session with url
+            network::fetch_root_cert(url, &self.ca_cert_file_name)?;
         }
+        certs::verify_cacert(&self.ca_cert_file_name)?;
         Ok(())
     }
 
     pub fn ensure_key(&self) -> Result<(), String> {
-        /// should perform:
-        /// 1. If no private key exists, create a new one and save it.
-        /// 2. Verify existing key files can be loaded and have a proper size / validation
+        // should perform:
+        // 1. If no private key exists, create a new one and save it.
+        // 2. Verify existing key files can be loaded and have a proper size / validation
         if Path::new(&self.key_file_name).exists() {
             certs::verify_private_key(&self.key_file_name)?;
             Ok(())
@@ -74,27 +51,35 @@ impl CertificateRequest {
         }
     }
     pub fn ensure_csr(&self) -> Result<(), String> {
-        /// should perform:
-        /// 1. If no CSR exist create a new one, building subject from "clientid" and "cacert"
-        ///    subjects
-        /// 2. Load the CSR and ensure that it's public key matches our private key
+        // should perform:
+        // 1. If no CSR exist create a new one, building subject from "clientid" and "cacert"
+        //    subjects
+        // 2. Load the CSR and ensure that it's public key matches our private key
+
+        if !Path::new(&self.csr_file_name).exists() {
+            certs::make_csr_request(&self.csr_file_name)?;
+        }
+        certs::verify_csr(&self.csr_file_name, &self.key_file_name)?;
+
         Err("Not implemented, ensure_csr".to_string())
     }
 
     pub fn ensure_crt(&self) -> Result<(), String> {
-        /// Should perform:
-        /// 1. sha256sum of the CSR file
-        /// 2. try to GET the crt from the server  https://ca/{sha256(csr)}
-        /// 2a. Default to trusting the public PKI
-        /// 2b. If TLS error, add the cacert to the list of verifying certs for this connection
-        /// 3. If we get 404, Post the CSR to the server
-        /// 4. If we get 202 or 304,  wait?
-        /// 5. If we get 200, save the cert to a temp place
-        /// 6. If we get a cert, verify that it's valid ( openssl verify, and make sure it matches
-        ///    our pub keypair)
-        /// 7. Replace existing cert with the new temp one, only if the two differ in checksum
-        ///    We don't want to update the files and cause inotify/service triggers because a cert
-        ///    has been replaced with the same thing.
+        // Should perform:
+        // 1. sha256sum of the CSR file
+        // 2. try to GET the crt from the server  https://ca/{sha256(csr)}
+        // 2a. Default to trusting the public PKI
+        // 2b. If TLS error, add the cacert to the list of verifying certs for this connection
+        // 3. If we get 404, Post the CSR to the server
+        // 4. If we get 202 or 304,  wait?
+        // 5. If we get 200, save the cert to a temp place
+        // 6. If we get a cert, verify that it's valid
+        //      ( openssl verify, and make sure it matches our pub keypair)
+        // 7. Replace existing cert with the new temp one.
+        //    Only if the two differ, to avoid updating ctime/mtime on files unnecessarily.
+        //
+        let temp_crt = network::get_crt(&self.server, &self.csr_file_name)?;
+        certs::verfiy_cert(&temp_crt, &self.ca_cert_file_name)?;
         Err("Not implemented, ensure_crt".to_string())
     }
 }
