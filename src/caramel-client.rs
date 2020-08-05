@@ -1,3 +1,5 @@
+mod certs;
+
 // pseudo code from Python of current application flow of caramel-clint
 /*
 def __init__(self, *, server, client_id):
@@ -56,15 +58,12 @@ impl CertificateRequest {
     }
 
     pub fn ensure_key(&self) -> Result<(), String> {
-        use openssl::pkey::PKey;
-        use openssl::rsa::Rsa;
         if Path::new(&self.key_file_name).exists() {
+            certs::verify_private_key(&self.key_file_name)?;
             Ok(())
         } else {
-            let rsa = Rsa::generate(2048).unwrap();
-            let pkey = PKey::from_rsa(rsa).unwrap();
-
-            Err("Not Implemented, ensure_key".to_string())
+            certs::create_private_key(&self.key_file_name)?;
+            Err("No can do".to_string())
         }
     }
     pub fn ensure_csr(&self) -> Result<(), String> {
