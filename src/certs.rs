@@ -1,3 +1,4 @@
+use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 
@@ -11,25 +12,54 @@ pub fn verify_cacert(_filename: &String) -> Result<(), String> {
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
 /// should probably take a path or similar rather than a string.
-/// placeholder
-pub fn verify_private_key(_filename: &String) -> Result<(), String> {
+pub fn verify_private_key(filename: &String) -> Result<(), String> {
     // Matching of
     /*
         openssl pkey -noout -in $filename
     */
-    Err("verify_key is not implemented".to_owned())
+
+    let contents = match std::fs::read(filename) {
+        Ok(c) => c,
+        _ => return Err("Unable to read private key from file".to_owned()),
+    };
+
+    let pkey = match PKey::private_key_from_pem(&contents) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error parsing private key: {}", e);
+            return Err("Unable to parse private key".to_owned());
+        }
+    };
+    if pkey.bits() < 2048 {
+        return Err("Private key is too short".to_owned());
+    }
+    Ok(())
 }
 
 /// Create a new private key and save it to filename
-/// Should definitely take a path...
-/// placeholder
-pub fn create_private_key(_filename: &String) -> Result<(), String> {
-    /*
-        openssl genrsa -out  $filename 2048
-    */
-    let rsa = Rsa::generate(2048).unwrap();
-    let _pkey = PKey::from_rsa(rsa).unwrap();
-    Err("create_private_key is not implemented".to_owned())
+/// Should this take a path rather than a string?
+pub fn create_private_key(filename: &String) -> Result<(), String> {
+    use std::io::prelude::*;
+
+    fn make_private_pem() -> Result<Vec<u8>, ErrorStack> {
+        let rsa = Rsa::generate(2048)?;
+        let pkey = PKey::from_rsa(rsa)?;
+        let pem = pkey.private_key_to_pem_pkcs8()?;
+        return Ok(pem);
+    }
+
+    let pemdata = match make_private_pem() {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error creating RSA key: {}", e);
+            return Err("Could not create private key".to_owned());
+        }
+    };
+    let mut file = std::fs::File::create(filename).unwrap();
+
+    file.write_all(&pemdata).unwrap();
+    println!("Wrote a new 2048 bit RSA key to '{}'", filename);
+    Ok(())
 }
 
 /// Create a subject from a CAcert + our expected clientid

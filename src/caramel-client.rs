@@ -43,13 +43,11 @@ impl CertificateRequest {
         // should perform:
         // 1. If no private key exists, create a new one and save it.
         // 2. Verify existing key files can be loaded and have a proper size / validation
-        if Path::new(&self.key_file_name).exists() {
-            certs::verify_private_key(&self.key_file_name)?;
-            Ok(())
-        } else {
+        if !Path::new(&self.key_file_name).exists() {
             certs::create_private_key(&self.key_file_name)?;
-            Err("No can do".to_string())
         }
+        certs::verify_private_key(&self.key_file_name)?;
+        Ok(())
     }
     pub fn ensure_csr(&self) -> Result<(), String> {
         // should perform:
