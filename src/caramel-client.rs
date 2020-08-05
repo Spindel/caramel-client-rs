@@ -22,7 +22,7 @@ impl CertificateRequest {
             csr_file_name: format!("{}{}", &client_id, ".csr"),
             crt_temp_file_name: format!("{}{}", &client_id, ".temp"),
             crt_file_name: format!("{}{}", &client_id, ".crt"),
-            ca_cert_file_name: format!("{}{}", &client_id, ".cacert"),
+            ca_cert_file_name: format!("{}{}", &server, ".cacert"),
         }
     }
 
@@ -31,8 +31,12 @@ impl CertificateRequest {
         // 1. Test for cacert
         // 2. Download root.crt and save to cacert if not.
         // 3. Verify cacert can be loaded
-        let url = format!("https://{}/root.crt", self.server);
         if !Path::new(&self.ca_cert_file_name).exists() {
+            let url = format!("https://{}/root.crt", self.server);
+            println!(
+                "Ca cert: '{}' does not exist, fetching.",
+                self.ca_cert_file_name
+            );
             network::fetch_root_cert(url, &self.ca_cert_file_name)?;
         }
         certs::verify_cacert(&self.ca_cert_file_name)?;
@@ -56,7 +60,7 @@ impl CertificateRequest {
         // 2. Load the CSR and ensure that it's public key matches our private key
 
         if !Path::new(&self.csr_file_name).exists() {
-            certs::make_csr_request(&self.csr_file_name, &self.client_id)?;
+            certs::make_csr_request(&self.ca_cert_file_name, &self.client_id)?;
         }
         certs::verify_csr(&self.csr_file_name, &self.key_file_name)?;
 

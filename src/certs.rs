@@ -3,11 +3,34 @@ use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 
 /// Load and verify that the CACert is okay.
-pub fn verify_cacert(_filename: &String) -> Result<(), String> {
+pub fn verify_cacert(filename: &String) -> Result<(), String> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
-    Err("verify_cacert is not implemented.".to_owned())
+    use openssl::x509;
+    let contents = match std::fs::read(filename) {
+        Ok(c) => c,
+        _ => return Err("Unable to read cacert from file when verifying cacert".to_owned()),
+    };
+
+    fn check_cacert(data: &Vec<u8>) -> Result<bool, ErrorStack> {
+        let cacert = x509::X509::from_pem(&data)?;
+        println!("Got cacert: {:?}", cacert);
+        let pkey = cacert.public_key()?;
+        let res = cacert.verify(&pkey)?;
+        Ok(res)
+    }
+
+    let valid = check_cacert(&contents);
+    println!("Validating cacert in file '{}'", filename);
+    match valid {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("CACert not self-signed.".to_owned()),
+        Err(e) => {
+            println!("Error parsing CA cert: {}", e);
+            return Err("Unable to parse CA cert".to_owned());
+        }
+    }
 }
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
@@ -64,7 +87,7 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
 
 /// Create a subject from a CAcert + our expected clientid
 /// placeholder
-fn make_subject(_cacert_filename: &String, _clientid: &String) -> Result<String, String> {
+fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, String> {
     //  This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
@@ -92,6 +115,31 @@ fn make_subject(_cacert_filename: &String, _clientid: &String) -> Result<String,
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
+    use openssl::x509;
+    println!("About to read {}", cacert_filename);
+    let contents = match std::fs::read(cacert_filename) {
+        Ok(c) => c,
+        _ => return Err("Unable to read cacert from file when getting subject".to_owned()),
+    };
+
+    fn get_subject(data: &Vec<u8>) -> Result<String, ErrorStack> {
+        let cacert = x509::X509::from_pem(&data)?;
+        println!("Got cacert: {:?}", cacert);
+        let subject_name = cacert.subject_name();
+        let issuer_name = cacert.issuer_name();
+        println!("Subject: {:?}", subject_name);
+        println!("Issuer: {:?}", issuer_name);
+        Ok("abc".to_owned())
+    }
+
+    let subj = match get_subject(&contents) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error parsing CA cert: {}", e);
+            return Err("Could not get subject from ca cert".to_owned());
+        }
+    };
+
     Err("make_subject is not implemented".to_owned())
 }
 
@@ -115,7 +163,7 @@ pub fn verfiy_cert(_temp_cert: &String, _ca_cert_file_name: &String) -> Result<S
 
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
 /// placeholder
-pub fn make_csr_request(_indata: &String, _clientid: &String) -> Result<String, String> {
+pub fn make_csr_request(cacert_filename: &String, clientid: &String) -> Result<String, String> {
     /*
     config:
         [ req ]
@@ -169,6 +217,6 @@ pub fn make_csr_request(_indata: &String, _clientid: &String) -> Result<String, 
      *   subject is the result of the above "make_subject" function
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
-    make_subject(&"place_holder".to_owned(), &"place_holder".to_owned())?;
+    make_subject(&cacert_filename, &clientid)?;
     Err("make_csr_request is not implemented".to_owned())
 }
