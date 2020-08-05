@@ -49,6 +49,10 @@ impl CertificateRequest {
     }
 
     pub fn ensure_cacert(&self) -> Result<(), String> {
+        /// should perform:
+        /// 1. Test for cacert
+        /// 2. Download root.crt and save to cacert if not.
+        /// 3. Verify cacert can be loaded
         let url = format!("https://{}/root.crt", self.server);
         if !Path::new(&self.ca_cert_file_name).exists() {
             println!("Attempting to fetch CA cert from {}", url); // TODO change to logging
@@ -58,6 +62,9 @@ impl CertificateRequest {
     }
 
     pub fn ensure_key(&self) -> Result<(), String> {
+        /// should perform:
+        /// 1. If no private key exists, create a new one and save it.
+        /// 2. Verify existing key files can be loaded and have a proper size / validation
         if Path::new(&self.key_file_name).exists() {
             certs::verify_private_key(&self.key_file_name)?;
             Ok(())
@@ -67,9 +74,27 @@ impl CertificateRequest {
         }
     }
     pub fn ensure_csr(&self) -> Result<(), String> {
+        /// should perform:
+        /// 1. If no CSR exist create a new one, building subject from "clientid" and "cacert"
+        ///    subjects
+        /// 2. Load the CSR and ensure that it's public key matches our private key
         Err("Not implemented, ensure_csr".to_string())
     }
+
     pub fn ensure_crt(&self) -> Result<(), String> {
+        /// Should perform:
+        /// 1. sha256sum of the CSR file
+        /// 2. try to GET the crt from the server  https://ca/{sha256(csr)}
+        /// 2a. Default to trusting the public PKI
+        /// 2b. If TLS error, add the cacert to the list of verifying certs for this connection
+        /// 3. If we get 404, Post the CSR to the server
+        /// 4. If we get 202 or 304,  wait?
+        /// 5. If we get 200, save the cert to a temp place
+        /// 6. If we get a cert, verify that it's valid ( openssl verify, and make sure it matches
+        ///    our pub keypair)
+        /// 7. Replace existing cert with the new temp one, only if the two differ in checksum
+        ///    We don't want to update the files and cause inotify/service triggers because a cert
+        ///    has been replaced with the same thing.
         Err("Not implemented, ensure_crt".to_string())
     }
 }
