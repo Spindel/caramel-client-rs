@@ -1,5 +1,6 @@
 mod certs;
 mod network;
+use std::path::Path;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 struct CertificateRequest {
@@ -57,7 +58,7 @@ impl CertificateRequest {
         // 2. Load the CSR and ensure that it's public key matches our private key
 
         if !Path::new(&self.csr_file_name).exists() {
-            certs::make_csr_request(&self.csr_file_name)?;
+            certs::make_csr_request(&self.csr_file_name, &self.client_id)?;
         }
         certs::verify_csr(&self.csr_file_name, &self.key_file_name)?;
 
@@ -80,6 +81,10 @@ impl CertificateRequest {
         //
         let temp_crt = network::get_crt(&self.server, &self.csr_file_name)?;
         certs::verfiy_cert(&temp_crt, &self.ca_cert_file_name)?;
+        println!(
+            "moving {} to {}",
+            &self.crt_temp_file_name, &self.crt_file_name
+        );
         Err("Not implemented, ensure_crt".to_string())
     }
 }
@@ -98,17 +103,6 @@ fn certificate_request(
     request_info.ensure_csr()?;
     request_info.ensure_crt()?;
     Ok("Received Certificate".into())
-}
-
-use std::path::Path;
-fn ensure_ca_cert_available(req: &CertificateRequest) -> Result<(), Box<dyn std::error::Error>> {
-    let url = format!("https://{}/root.crt", req.server);
-
-    if !Path::new(&req.ca_cert_file_name).exists() {
-        println!("Attempting to fetch CA cert"); // TODO change to logging
-                                                 //Setup session with url
-    }
-    Ok(())
 }
 
 /// Parse the commandline, returning server and client_id

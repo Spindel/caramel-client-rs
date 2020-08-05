@@ -85,7 +85,7 @@ pub fn verfiy_cert(_temp_cert: &String, _ca_cert_file_name: &String) -> Result<S
 
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
 /// placeholder
-pub fn make_csr_request(_indata: &String) -> Result<String, String> {
+pub fn make_csr_request(_indata: &String, _clientid: &String) -> Result<String, String> {
     /*
     config:
         [ req ]
