@@ -92,6 +92,44 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
     Ok(())
 }
 
+fn workaround_subject() -> (openssl::x509::X509Name, openssl::x509::X509Name) {
+    use openssl::nid::Nid;
+    use openssl::x509::{X509Name, X509};
+
+    let mut before = X509Name::builder().unwrap();
+    before.append_entry_by_nid(Nid::COUNTRYNAME, "SE").unwrap();
+    before
+        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
+        .unwrap();
+    before
+        .append_entry_by_nid(Nid::LOCALITYNAME, "Linköping")
+        .unwrap();
+    before
+        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
+        .unwrap();
+    before
+        .append_entry_by_nid(Nid::STATEORPROVINCENAME, "Östergötland")
+        .unwrap();
+    let subj_before = before.build();
+
+    let mut after = X509Name::builder().unwrap();
+    after.append_entry_by_nid(Nid::COUNTRYNAME, "SE").unwrap();
+    after
+        .append_entry_by_nid(Nid::STATEORPROVINCENAME, "Östergötland")
+        .unwrap();
+    after
+        .append_entry_by_nid(Nid::LOCALITYNAME, "Linköping")
+        .unwrap();
+    after
+        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
+        .unwrap();
+    after
+        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
+        .unwrap();
+    let subj_after = after.build();
+    return (subj_before, subj_after);
+}
+
 /// Create a subject from a CAcert + our expected clientid
 /// placeholder
 fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, String> {
@@ -128,6 +166,8 @@ fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, 
         Ok(c) => c,
         _ => return Err("Unable to read cacert from file when getting subject".to_owned()),
     };
+
+    let (before, after) = workaround_subject();
 
     fn get_subject(data: &Vec<u8>) -> Result<String, ErrorStack> {
         let cacert = x509::X509::from_pem(&data)?;
