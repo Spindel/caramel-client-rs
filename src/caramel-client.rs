@@ -60,11 +60,15 @@ impl CertificateRequest {
         // 2. Load the CSR and ensure that it's public key matches our private key
 
         if !Path::new(&self.csr_file_name).exists() {
-            certs::make_csr_request(&self.ca_cert_file_name, &self.client_id)?;
+            certs::create_csr_request(
+                &self.csr_file_name,
+                &self.ca_cert_file_name,
+                &self.client_id,
+                &self.key_file_name,
+            )?;
         }
-        certs::verify_csr(&self.csr_file_name, &self.key_file_name)?;
-
-        Err("Not implemented, ensure_csr".to_string())
+        certs::verify_csr(&self.csr_file_name, &self.key_file_name, &self.client_id)?;
+        Ok(())
     }
 
     pub fn ensure_crt(&self) -> Result<(), String> {
@@ -81,8 +85,22 @@ impl CertificateRequest {
         // 7. Replace existing cert with the new temp one.
         //    Only if the two differ, to avoid updating ctime/mtime on files unnecessarily.
         //
+        if Path::new(&self.crt_file_name).exists() {
+            certs::verify_cert(
+                &self.crt_file_name,
+                &self.ca_cert_file_name,
+                &self.key_file_name,
+                &self.client_id,
+            )?;
+        }
+
         let temp_crt = network::get_crt(&self.server, &self.csr_file_name)?;
-        certs::verfiy_cert(&temp_crt, &self.ca_cert_file_name)?;
+        certs::verify_cert(
+            &temp_crt,
+            &self.ca_cert_file_name,
+            &self.key_file_name,
+            &self.client_id,
+        )?;
         println!(
             "moving {} to {}",
             &self.crt_temp_file_name, &self.crt_file_name
