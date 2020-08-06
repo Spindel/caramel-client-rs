@@ -44,7 +44,6 @@ pub fn verify_private_key(filename: &String) -> Result<(), String> {
         openssl pkey -noout -in $filename
     */
 
-println!("Validating private key in file '{}'", filename);
     let contents = match std::fs::read(filename) {
         Ok(c) => c,
         _ => return Err("Unable to read private key from file".to_owned()),
@@ -110,6 +109,10 @@ fn workaround_subject() -> (openssl::x509::X509Name, openssl::x509::X509Name) {
     before
         .append_entry_by_nid(Nid::STATEORPROVINCENAME, "Östergötland")
         .unwrap();
+    before
+        .append_entry_by_nid(Nid::COMMONNAME, "Caramel Signing Certificate")
+        .unwrap();
+
     let subj_before = before.build();
 
     let mut after = X509Name::builder().unwrap();
@@ -126,13 +129,77 @@ fn workaround_subject() -> (openssl::x509::X509Name, openssl::x509::X509Name) {
     after
         .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
         .unwrap();
+    after
+        .append_entry_by_nid(Nid::COMMONNAME, "Caramel Signing Certificate")
+        .unwrap();
     let subj_after = after.build();
+
     return (subj_before, subj_after);
+}
+
+/// Parse the cert-data from a file, returning an owned copy of a CA subject.
+/// This handles the data-replacement of our "known bad" compatibility subject as well.
+fn get_ca_subject(filename: &String) -> Result<openssl::x509::X509Name, ErrorStack> {
+    use openssl::x509;
+    let mut names = x509::X509Name::load_client_ca_file(&filename)?;
+    assert!(names.len() == 1, "More than 1 name present in the CA cert");
+
+    let subject = names.pop().unwrap();
+    let (before, after) = workaround_subject();
+
+    // This should technically compare the two item-by-item
+    // However, string-wise comparision seems to also work about as well.
+    // btw. as_ref is needed as we can only print _references_ to an object, not the actual object.
+    let real_subj = format!("{:?}", subject.as_ref());
+    let should_replace = format!("{:?}", before.as_ref());
+    match real_subj == should_replace {
+        true => {
+            println!(
+                "Backwards compat hack in place. Replacing subjects.
+Original: '{}'
+Replaced: '{:?}'",
+                real_subj,
+                after.as_ref()
+            );
+            Ok(after)
+        }
+        false => Ok(subject),
+    }
+}
+
+/// Make a new subject from the CA subject
+/// This code works with OpenSSL datatypes and errors
+fn make_inner_subject(
+    ca_subject: openssl::x509::X509Name,
+    clientid: &String,
+) -> Result<openssl::x509::X509Name, ErrorStack> {
+    use openssl::nid::Nid;
+    use openssl::x509::{X509Name, X509};
+
+    let mut subject = X509Name::builder()?;
+    let all_entries = ca_subject.entries();
+    for entry in all_entries {
+        let entry_nid = entry.object().nid();
+        let entry_text = entry.data().as_utf8()?;
+
+        if entry_nid == Nid::COMMONNAME {
+            println!("Changing {:?}=={} => {}", entry_nid, &entry_text, clientid);
+            subject.append_entry_by_nid(Nid::COMMONNAME, clientid)?;
+        } else {
+            println!("Passing through {:?}=={}", &entry_nid, &entry_text);
+            subject.append_entry_by_nid(entry_nid, &entry_text)?;
+        }
+    }
+    let our_subject = subject.build();
+    Ok(our_subject)
 }
 
 /// Create a subject from a CAcert + our expected clientid
 /// placeholder
-fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, String> {
+fn make_subject(
+    cacert_filename: &String,
+    clientid: &String,
+) -> Result<openssl::x509::X509Name, String> {
     //  This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
@@ -160,34 +227,23 @@ fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, 
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
-    use openssl::x509;
-    println!("About to read CA cert from file {}", cacert_filename);
-    let contents = match std::fs::read(cacert_filename) {
-        Ok(c) => c,
-        _ => return Err("Unable to read cacert from file when getting subject".to_owned()),
-    };
-
-    let (before, after) = workaround_subject();
-
-    fn get_subject(data: &Vec<u8>) -> Result<String, ErrorStack> {
-        let cacert = x509::X509::from_pem(&data)?;
-        println!("Got cacert: {:?}", cacert);
-        let subject_name = cacert.subject_name();
-        let issuer_name = cacert.issuer_name();
-        println!("Subject: {:?}", subject_name);
-        println!("Issuer: {:?}", issuer_name);
-        Ok("abc".to_owned())
-    }
-
-    let subj = match get_subject(&contents) {
+    let subj = match get_ca_subject(&cacert_filename) {
         Ok(c) => c,
         Err(e) => {
             println!("Error parsing CA cert: {}", e);
             return Err("Could not get subject from ca cert".to_owned());
         }
     };
-
-    Err("make_subject is not implemented".to_owned())
+    println!("Got ca subject   {:?}", subj.as_ref());
+    let new_subject = match make_inner_subject(subj, clientid) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error building new subject: {}", e);
+            return Err("Could not create new subject from ca_cert".to_owned());
+        }
+    };
+    println!("Created new subject '{:?}'", new_subject.as_ref());
+    Ok(new_subject)
 }
 
 pub fn verify_csr(_csrfile: &String, _keyfile: &String) -> Result<String, String> {
@@ -264,6 +320,6 @@ pub fn make_csr_request(cacert_filename: &String, clientid: &String) -> Result<S
      *   subject is the result of the above "make_subject" function
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
-    make_subject(&cacert_filename, &clientid)?;
+    let _subject = make_subject(&cacert_filename, &clientid)?;
     Err("make_csr_request is not implemented".to_owned())
 }
