@@ -2,6 +2,9 @@ use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 
+const DESIRED_RSA_BITS: u32 = 2048;
+const MIN_RSA_BITS: u32 = 2048;
+
 /// Load and verify that the CACert is okay.
 pub fn verify_cacert(filename: &String) -> Result<(), String> {
     /*
@@ -53,7 +56,7 @@ pub fn verify_private_key(filename: &String) -> Result<(), String> {
             return Err("Unable to parse private key".to_owned());
         }
     };
-    if pkey.bits() < 2048 {
+    if pkey.bits() < MIN_RSA_BITS {
         return Err("Private key is too short".to_owned());
     }
     Ok(())
@@ -65,7 +68,7 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
     use std::io::prelude::*;
 
     fn make_private_pem() -> Result<Vec<u8>, ErrorStack> {
-        let rsa = Rsa::generate(2048)?;
+        let rsa = Rsa::generate(DESIRED_RSA_BITS)?;
         let pkey = PKey::from_rsa(rsa)?;
         let pem = pkey.private_key_to_pem_pkcs8()?;
         return Ok(pem);
@@ -81,7 +84,10 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
     let mut file = std::fs::File::create(filename).unwrap();
 
     file.write_all(&pemdata).unwrap();
-    println!("Wrote a new 2048 bit RSA key to '{}'", filename);
+    println!(
+        "Wrote a new {} bit RSA key to '{}'",
+        DESIRED_RSA_BITS, filename
+    );
     Ok(())
 }
 
