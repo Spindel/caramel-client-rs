@@ -28,3 +28,19 @@ test:cargo:
 #    refs:
 #      - master
 #      - tags
+
+
+crosscompile:
+  allow_failure: true
+  before_script:
+    - cp .cargo-cross-config /usr/local/cargo/config
+    - rustup target add armv7-unknown-linux-gnueabihf
+    - dpkg --add-architecture armhf
+    - apt-get update
+    - apt-get install -y libc6-armhf-cross libc6-dev-armhf-cross gcc-arm-linux-gnueabihf
+
+  script:
+    - cargo check --target x86_64-unknown-linux-gnu
+    - cargo check --target armv7-unknown-linux-gnueabihf
+    # Build
+    - cargo build --release --target armv7-unknown-linux-gnueabihf
