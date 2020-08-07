@@ -33,7 +33,7 @@ impl CertificateRequest {
         // 3. Verify cacert can be loaded
         if !Path::new(&self.ca_cert_file_name).exists() {
             println!(
-                "Ca cert: '{}' does not exist, fetching.",
+                "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
             network::fetch_root_cert(&self.server, &self.ca_cert_file_name)?;
