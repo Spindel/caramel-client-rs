@@ -1,7 +1,15 @@
+mod hexsum;
+
 use curl::easy::Easy;
 use std::fs::File;
 use std::io::{stdout, Write};
 use std::path::Path;
+
+pub enum CertState {
+    NotFound,
+    Pending,
+    Done,
+}
 
 /// Fetch the root certificate if we do not have it already.
 /// Will fail violently if the file already exists
@@ -73,6 +81,81 @@ pub fn fetch_root_cert(server: &String, filename: &String) -> Result<(), String>
     Ok(())
 }
 
+/// Assuming that a certificate file does not exist on the server, post the file.
+/// Internal use, handle is an already initialized and configured curl handle with the correct
+/// logic for data
+fn post_csr(handle: curl::easy::Easy, csr_filename: &String) -> Result<(), String> {
+    use std::io::prelude::*;
+
+    let path = Path::new(&csr_filename);
+    let mut file = match File::open(&path) {
+        Err(e) => panic!("Unable to read: {}", e),
+        Ok(file) => file,
+    };
+    let mut data = String::new();
+
+    match file.read_to_string(&mut data) {
+        Err(e) => panic!("Humbug reading: {}", e),
+        _ => println!("File read"),
+    };
+
+    let hexname = hexsum::sha256hex(&data);
+    let url = format!("https://foo/{}", hexname);
+    println!("About to post to: {}", url);
+    Err("humbug".to_owned())
+}
+
+/// 1. set up our default settings for curl connections
+/// 2. Try to connect using the default PKI info of the  server
+/// 2a. Return a handle if that works
+/// 3. If it failed, add the ca_cert to the cert store, and try again
+/// 3a. Return handle if that works
+/// 4. failure
+///
+fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy, String> {
+    // First we start by getting https://{server}/
+    // Then, if that succeeds, we are done and return the handle
+    // If that _fails_ because fex. SSL certificate failure, we add the ca_cert to the SSL
+    // connection path, and try again.
+    // If that succeeds, we return success.
+    // Otherwise, fail hard as we cannot continue
+    //
+    let url = format!("https://{}/root.crt", server);
+    let mut handle = Easy::new();
+    handle.ssl_verify_host(true).unwrap();
+    handle.ssl_verify_peer(true).unwrap();
+    handle
+        .ssl_min_max_version(
+            curl::easy::SslVersion::Tlsv11,
+            curl::easy::SslVersion::Tlsv13,
+        )
+        .unwrap();
+    handle.url(&url).unwrap();
+    match handle.perform() {
+        Ok(_) => {
+            println!("Got a handle on the first attempt.");
+            return Ok(handle);
+        }
+        Err(e) => println!("Failed to connect with default TLS settings. \n{}", e),
+    };
+
+    // Force a re-connect on the next run
+    handle.fresh_connect(true);
+    let ca_path = Path::new(&ca_cert);
+    handle.cainfo(ca_path);
+
+    match handle.perform() {
+        Ok(_) => {
+            println!("Got a handle on second attempt");
+            return Ok(handle);
+        }
+        Err(e) => {
+            println!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
+        }
+    };
+    Err("Unable to get a connection".to_owned())
+}
+
 /// Get crt wraps all the logic that we might need to perform to get a certificate
 /// 1. Get the required connection information (tls, curl handle, etc)
 /// 2. Calculate sha256sum of our csr to post to the server.
@@ -80,7 +163,7 @@ pub fn fetch_root_cert(server: &String, filename: &String) -> Result<(), String>
 /// 4. If we fail, POST the certificate to the server and try again
 /// 5. Depending on error codes, wait longer or not
 ///
-pub fn get_crt(_url: &String, _csrfile: &String) -> Result<String, String> {
+pub fn get_crt(server: &String, ca_cert: &String, csr_filename: &String) -> Result<String, String> {
     // Try GET on the url:
     //     if 200:  return
     //     if 202: Do nothing, we are waiting for the server to sign
@@ -89,5 +172,8 @@ pub fn get_crt(_url: &String, _csrfile: &String) -> Result<String, String> {
     //
     //     Other return codes? Treat as an error
     //
-    Err("get_crt is not implemented".to_owned())
+    use std::fs::OpenOptions;
+    let handle = get_curl_handle(&server, &ca_cert)?;
+    post_csr(handle, &csr_filename).unwrap();
+    Err("get_crt is not implemented yet".to_owned())
 }

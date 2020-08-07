@@ -93,7 +93,9 @@ impl CertificateRequest {
             )?;
         }
 
-        let temp_crt = network::get_crt(&self.server, &self.csr_file_name)?;
+        let temp_crt =
+            network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
+
         certs::verify_cert(
             &temp_crt,
             &self.ca_cert_file_name,
