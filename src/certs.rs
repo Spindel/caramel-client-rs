@@ -13,12 +13,12 @@ pub fn verify_cacert(filename: &String) -> Result<(), String> {
     use openssl::x509;
     let contents = match std::fs::read(filename) {
         Ok(c) => c,
-        _ => return Err("Unable to read cacert from file when verifying cacert".to_owned()),
+        _ => return Err("Unable to read CA cert from file when verifying cacert".to_owned()),
     };
 
     fn check_cacert(data: &Vec<u8>) -> Result<bool, ErrorStack> {
         let cacert = x509::X509::from_pem(&data)?;
-        println!("Got cacert: {:?}", cacert);
+        println!("Got CA cert: {:?}", cacert);
         let pkey = cacert.public_key()?;
         let res = cacert.verify(&pkey)?;
         Ok(res)
@@ -28,7 +28,7 @@ pub fn verify_cacert(filename: &String) -> Result<(), String> {
     println!("Validating cacert in file '{}'", filename);
     match valid {
         Ok(true) => Ok(()),
-        Ok(false) => Err("CACert not self-signed.".to_owned()),
+        Ok(false) => Err("CA cert not self-signed.".to_owned()),
         Err(e) => {
             println!("Error parsing CA cert: {}", e);
             return Err("Unable to parse CA cert".to_owned());
@@ -44,6 +44,7 @@ pub fn verify_private_key(filename: &String) -> Result<(), String> {
         openssl pkey -noout -in $filename
     */
 
+println!("Validating private key in file '{}'", filename);
     let contents = match std::fs::read(filename) {
         Ok(c) => c,
         _ => return Err("Unable to read private key from file".to_owned()),
@@ -77,15 +78,15 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
     let pemdata = match make_private_pem() {
         Ok(c) => c,
         Err(e) => {
-            println!("Error creating RSA key: {}", e);
-            return Err("Could not create private key".to_owned());
+            println!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
+            return Err("Could not create private RSA key".to_owned());
         }
     };
     let mut file = std::fs::File::create(filename).unwrap();
 
     file.write_all(&pemdata).unwrap();
     println!(
-        "Wrote a new {} bit RSA key to '{}'",
+        "Wrote a new {} bit RSA key to file '{}'",
         DESIRED_RSA_BITS, filename
     );
     Ok(())
@@ -122,7 +123,7 @@ fn make_subject(cacert_filename: &String, _clientid: &String) -> Result<String, 
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
     use openssl::x509;
-    println!("About to read {}", cacert_filename);
+    println!("About to read CA cert from file {}", cacert_filename);
     let contents = match std::fs::read(cacert_filename) {
         Ok(c) => c,
         _ => return Err("Unable to read cacert from file when getting subject".to_owned()),
@@ -153,7 +154,7 @@ pub fn verify_csr(_csrfile: &String, _keyfile: &String) -> Result<String, String
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
-    Err("verify_csr is implemented".to_owned())
+    Err("verify_csr is not implemented".to_owned())
 }
 
 /// Verify that the cert we downloaded matches what we want
