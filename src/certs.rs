@@ -1,3 +1,4 @@
+use log::{debug, error, info};
 use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -12,7 +13,7 @@ const MIN_RSA_BITS: u32 = 2048;
 
 fn openssl_verify_cacert(contents: &Vec<u8>) -> Result<bool, ErrorStack> {
     let cacert = X509::from_pem(&contents)?;
-    println!("Got CA cert: {:?}", cacert);
+    info!("Got CA cert: {:?}", cacert);
     let pkey = cacert.public_key()?;
     let res = cacert.verify(&pkey)?;
     Ok(res)
@@ -27,7 +28,7 @@ pub fn verify_cacert(contents: &Vec<u8>) -> Result<(), String> {
         Ok(true) => Ok(()),
         Ok(false) => Err("CA cert not self-signed.".to_owned()),
         Err(e) => {
-            println!("Error parsing CA cert: {}", e);
+            error!("Error parsing CA cert: {}", e);
             return Err("Unable to parse CA cert".to_owned());
         }
     }
@@ -43,7 +44,7 @@ pub fn verify_private_key(contents: &Vec<u8>) -> Result<(), String> {
     let pkey = match PKey::private_key_from_pem(&contents) {
         Ok(c) => c,
         Err(e) => {
-            println!("Error parsing private key: {}", e);
+            error!("Error parsing private key: {}", e);
             return Err("Unable to parse private key".to_owned());
         }
     };
@@ -65,7 +66,7 @@ pub fn create_private_key() -> Result<Vec<u8>, String> {
     match openssl_create_private_key(DESIRED_RSA_BITS) {
         Ok(c) => Ok(c),
         Err(e) => {
-            println!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
+            error!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
             Err("Could not create private RSA key".to_owned())
         }
     }
@@ -149,8 +150,8 @@ fn get_ca_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
     let should_replace = format!("{:?}", before.as_ref());
     match real_subj == should_replace {
         true => {
-            println!(
-                "Backwards compat hack in place. Replacing subjects.
+            debug!(
+                "Backwards compatibility hack in place. Replacing subjects.
 Original: '{:?}'
 Replaced: '{:?}'",
                 subject.as_ref(),
@@ -180,10 +181,10 @@ fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Na
         let entry_text = entry.data().as_utf8()?;
 
         if entry_nid == Nid::COMMONNAME {
-            println!("Changing {:?}=={} => {}", entry_nid, &entry_text, clientid);
+            debug!("Changing {:?}=={} => {}", entry_nid, &entry_text, clientid);
             subject.append_entry_by_nid(Nid::COMMONNAME, clientid)?;
         } else {
-            println!("Passing through {:?}=={}", &entry_nid, &entry_text);
+            debug!("Passing through {:?}=={}", &entry_nid, &entry_text);
             subject.append_entry_by_nid(entry_nid, &entry_text)?;
         }
     }
@@ -225,9 +226,9 @@ fn openssl_make_subject(cacert_data: &Vec<u8>, clientid: &str) -> Result<X509Nam
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
     let subj = get_ca_subject(&cacert_data)?;
-    println!("Got ca subject   {:?}", subj.as_ref());
+    debug!("Got ca subject   {:?}", subj.as_ref());
     let new_subject = make_inner_subject(&subj, clientid)?;
-    println!("Created new subject '{:?}'", new_subject.as_ref());
+    debug!("Created new subject '{:?}'", new_subject.as_ref());
     Ok(new_subject)
 }
 
@@ -277,7 +278,7 @@ pub fn verify_csr(csr_data: &Vec<u8>, key_data: &Vec<u8>, clientid: &str) -> Res
         Ok(true) => Ok(()),
         Ok(false) => Err("CSR not signed by our private key".to_owned()),
         Err(e) => {
-            println!("Error parsing CSR: {}", e);
+            error!("Error parsing CSR: {}", e);
             return Err("Unable to validate CSR".to_owned());
         }
     }
@@ -320,7 +321,7 @@ pub fn verify_cert(
         Ok(true) => Ok(()),
         Ok(false) => Err("Certificates load but do not match".to_owned()),
         Err(e) => {
-            println!("Error verifying certificate: {}", e);
+            error!("Error verifying certificate: {}", e);
             Err("Unable to validate certificate".to_owned())
         }
     }
@@ -412,14 +413,14 @@ pub fn create_csr(
     let subject = match openssl_make_subject(cacert_data, &clientid) {
         Ok(c) => c,
         Err(e) => {
-            println!("OpenSSL Error building request: {}", e);
+            error!("OpenSSL Error building request: {}", e);
             return Err("Error while building new CSR Subject ".to_owned());
         }
     };
     let pemdata = match openssl_create_csr(private_key, subject) {
         Ok(c) => c,
         Err(e) => {
-            println!("OpenSSL Error building request: {}", e);
+            error!("OpenSSL Error building request: {}", e);
             return Err("Error while building new Certificate Sign Request".to_owned());
         }
     };

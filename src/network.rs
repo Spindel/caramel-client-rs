@@ -1,6 +1,7 @@
 mod hexsum;
 
 use curl::easy::Easy;
+use log::{debug, error, info};
 use std::fs::File;
 use std::path::Path;
 
@@ -21,7 +22,7 @@ pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
     //    server.
     // 4. Download the cert, return it
     let url = format!("https://{}/root.crt", server);
-    println!("Attempting to fetch CA cert from {}", url);
+    info!("Attempting to fetch CA cert from {}", url);
 
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this
@@ -54,9 +55,9 @@ pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
             .unwrap();
 
         match transfer.perform() {
-            Ok(_) => println!("Got a new CA certificate"),
+            Ok(_) => info!("Got a new CA certificate"),
             Err(e) => {
-                println!("Error fetching certificate: {}", e);
+                error!("Error fetching certificate: {}", e);
                 return Err("Unable to fetch cert".to_owned());
             }
         }
@@ -79,12 +80,12 @@ fn post_csr(handle: curl::easy::Easy, csr_filename: &String) -> Result<(), Strin
 
     match file.read_to_string(&mut data) {
         Err(e) => panic!("Humbug reading: {}", e),
-        _ => println!("File read"),
+        _ => debug!("File read"),
     };
 
     let hexname = hexsum::sha256hex(&data);
     let url = format!("https://foo/{}", hexname);
-    println!("About to post to: {}", url);
+    info!("About to post to: {}", url);
     Err("humbug".to_owned())
 }
 
@@ -116,10 +117,10 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
     handle.url(&url).unwrap();
     match handle.perform() {
         Ok(_) => {
-            println!("Got a handle on the first attempt.");
+            debug!("Got a handle on the first attempt.");
             return Ok(handle);
         }
-        Err(e) => println!("Failed to connect with default TLS settings. \n{}", e),
+        Err(e) => error!("Failed to connect with default TLS settings. \n{}", e),
     };
 
     // Force a re-connect on the next run
@@ -129,11 +130,11 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
 
     match handle.perform() {
         Ok(_) => {
-            println!("Got a handle on second attempt");
+            debug!("Got a handle on second attempt");
             return Ok(handle);
         }
         Err(e) => {
-            println!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
+            error!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
         }
     };
     Err("Unable to get a connection".to_owned())
