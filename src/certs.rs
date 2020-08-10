@@ -303,7 +303,7 @@ fn check_commoname_match(
     if clientid != &name {
         return Ok(false);
     }
-    // Other validation here.
+    // MAX_CN_LENGTH is from the caramel server codebase as of 2020-07
     if name.len() > MAX_CN_LENGTH {
         return Ok(false);
     }
@@ -312,7 +312,7 @@ fn check_commoname_match(
 
 /// Verify that the Certificate Sign Request is valid according to our rules
 /// The Client ID must match our expected client-id
-/// The private key must match the Requests public ke
+/// The private key must match the Requests public key
 ///
 /// Left undone: Verfiy that the CSR checks out against the server
 
@@ -396,7 +396,8 @@ pub fn verify_cert(
 }
 
 /// Create a new CSR request from the OpenSSL Private key and Subject, returning the data as a PEM
-/// object vector.
+/// Create a new CSR request from the OpenSSL Private key and Subject,
+/// returning the data as a PEM object vector.
 /// This function works on and with OpenSSL data-types.
 fn make_new_request(private_key: PKey<Private>, subject: X509Name) -> Result<Vec<u8>, ErrorStack> {
     use openssl::hash::MessageDigest;
