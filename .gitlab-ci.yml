@@ -44,3 +44,44 @@ crosscompile:
     - cargo check --target armv7-unknown-linux-gnueabihf
     # Build
     - cargo build --release --target armv7-unknown-linux-gnueabihf
+
+.rebase: &rebase
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      # do not run on master
+      when: never
+
+    - if: $CI_COMMIT_TAG
+      # Do not run on tags
+      when: never
+
+    - if: $CI_MERGE_REQUEST_IID
+      # Run only on merge requests
+      when: always
+
+  variables:
+    # Make sure that git also fetches origin/master
+    GIT_FETCH_EXTRA_FLAGS: master
+
+  before_script:
+    - git config --global user.email "ci@localhost"
+    - git config --global user.name "CI System"
+
+
+# Split check & fmt as two different jobs only so that we don't error early in
+# case one of them fails
+rebase:check:
+  <<: *rebase
+  script:
+    - git rebase --rebase-merges --autosquash origin/master
+      -x 'git --no-pager log --oneline --max-count=1'
+      -x 'cargo check'
+
+rebase:fmt:
+  <<: *rebase
+  script:
+    - rustup component add rustfmt
+    - git rebase --rebase-merges --autosquash origin/master
+      -x 'git --no-pager log --oneline --max-count=1'
+      -x 'cargo fmt -- --check'
