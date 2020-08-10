@@ -91,6 +91,9 @@ pub fn create_private_key(filename: &String) -> Result<(), String> {
     Ok(())
 }
 
+/// Old caramel, before Open Source release, did not specify the order of the fields as strictly as today.
+/// Due to the root crt not being rotated on the embedded firmwares of devices, the new clients should pass it in a work-around order for this very specific certificate.
+/// This is a backwards compatibility hack around names and naming structures so it is set to only match on this specific case.
 fn workaround_subject() -> (openssl::x509::X509Name, openssl::x509::X509Name) {
     use openssl::nid::Nid;
     use openssl::x509::{X509Name, X509};
@@ -168,6 +171,12 @@ Replaced: '{:?}'",
 }
 
 /// Make a new subject from the CA subject
+///
+/// ex.  Converts  from
+///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = Caramel Signing Certificate`
+/// to
+///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9` 
+/// It passes through all data-points _except_ CommonName, which gets set to `client_id`
 /// This code works with OpenSSL datatypes and errors
 fn make_inner_subject(
     ca_subject: openssl::x509::X509Name,
