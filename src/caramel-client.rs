@@ -32,12 +32,11 @@ impl CertificateRequest {
         // 2. Download root.crt and save to cacert if not.
         // 3. Verify cacert can be loaded
         if !Path::new(&self.ca_cert_file_name).exists() {
-            let url = format!("https://{}/root.crt", self.server);
             println!(
-                "Ca cert: '{}' does not exist, fetching.",
+                "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
-            network::fetch_root_cert(url, &self.ca_cert_file_name)?;
+            network::fetch_root_cert(&self.server, &self.ca_cert_file_name)?;
         }
         certs::verify_cacert(&self.ca_cert_file_name)?;
         Ok(())
@@ -94,7 +93,9 @@ impl CertificateRequest {
             )?;
         }
 
-        let temp_crt = network::get_crt(&self.server, &self.csr_file_name)?;
+        let temp_crt =
+            network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
+
         certs::verify_cert(
             &temp_crt,
             &self.ca_cert_file_name,
