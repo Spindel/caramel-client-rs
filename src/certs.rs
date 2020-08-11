@@ -1,8 +1,8 @@
 use openssl::error::ErrorStack;
-use openssl::pkey::{PKey, Private};
+use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::x509;
-use openssl::x509::{X509Name, X509Req, X509};
+use openssl::x509::{X509Name, X509NameRef, X509Req, X509};
 
 // Encoded in upstream definitions
 const MAX_CN_LENGTH: usize = 64;
@@ -10,23 +10,20 @@ const MAX_CN_LENGTH: usize = 64;
 const DESIRED_RSA_BITS: u32 = 2048;
 const MIN_RSA_BITS: u32 = 2048;
 
+fn openssl_verify_cacert(contents: &Vec<u8>) -> Result<bool, ErrorStack> {
+    let cacert = X509::from_pem(&contents)?;
+    println!("Got CA cert: {:?}", cacert);
+    let pkey = cacert.public_key()?;
+    let res = cacert.verify(&pkey)?;
+    Ok(res)
+}
+
 /// Load and verify that the CACert is okay.
-pub fn verify_cacert(filename: &String) -> Result<(), String> {
+pub fn verify_cacert(contents: &Vec<u8>) -> Result<(), String> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
-    let cacert = load_cert(filename)?;
-
-    fn check_cacert(cacert: X509) -> Result<bool, ErrorStack> {
-        println!("Got CA cert: {:?}", cacert);
-        let pkey = cacert.public_key()?;
-        let res = cacert.verify(&pkey)?;
-        Ok(res)
-    }
-
-    let valid = check_cacert(cacert);
-    println!("Validating CA cert in file '{}'", filename);
-    match valid {
+    match openssl_verify_cacert(contents) {
         Ok(true) => Ok(()),
         Ok(false) => Err("CA cert not self-signed.".to_owned()),
         Err(e) => {
@@ -36,100 +33,42 @@ pub fn verify_cacert(filename: &String) -> Result<(), String> {
     }
 }
 
-/// Load a file into a private key-pair object
-fn load_private_key(filename: &String) -> Result<PKey<Private>, String> {
-    let contents = match std::fs::read(filename) {
-        Ok(c) => c,
-        _ => return Err("Unable to read private key from file".to_owned()),
-    };
-
-    let pkey = PKey::private_key_from_pem(&contents);
-    match pkey {
-        Ok(c) => Ok(c),
-        Err(e) => {
-            println!("Error parsing private key: {}", e);
-            return Err("Unable to parse private key".to_owned());
-        }
-    }
-}
-
-/// Load a file into a CSR object.
-fn load_csr_file(filename: &String) -> Result<X509Req, String> {
-    let contents = match std::fs::read(filename) {
-        Ok(c) => c,
-        _ => return Err("Unable to read CSR  from file".to_owned()),
-    };
-
-    let csr = X509Req::from_pem(&contents);
-
-    match csr {
-        Ok(c) => Ok(c),
-        Err(e) => {
-            println!("Error parsing CSR file from disk: {}", e);
-            Err("Unable to parse csr file".to_owned())
-        }
-    }
-}
-
-/// Load a file into a X509 Certificate object
-fn load_cert(filename: &String) -> Result<X509, String> {
-    let contents = match std::fs::read(filename) {
-        Ok(c) => c,
-        _ => return Err("Unable to read cacert from file when verifying cacert".to_owned()),
-    };
-
-    let cert = X509::from_pem(&contents);
-    match cert {
-        Ok(c) => Ok(c),
-        Err(e) => {
-            println!("Error from openssl when loading certificate: {}", e);
-            Err("Error loading key".to_owned())
-        }
-    }
-}
-
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
 /// should probably take a path or similar rather than a string.
-pub fn verify_private_key(filename: &String) -> Result<(), String> {
+pub fn verify_private_key(contents: &Vec<u8>) -> Result<(), String> {
     // Matching of
     /*
         openssl pkey -noout -in $filename
     */
-
-    let pkey = load_private_key(filename)?;
+    let pkey = match PKey::private_key_from_pem(&contents) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Error parsing private key: {}", e);
+            return Err("Unable to parse private key".to_owned());
+        }
+    };
     if pkey.bits() < MIN_RSA_BITS {
         return Err("Private key is too short".to_owned());
     }
     Ok(())
 }
 
-/// Create a new private key and save it to filename
-/// Should this take a path rather than a string?
-pub fn create_private_key(filename: &String) -> Result<(), String> {
-    use std::io::prelude::*;
+fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
+    let rsa = Rsa::generate(size)?;
+    let pkey = PKey::from_rsa(rsa)?;
+    let pem = pkey.private_key_to_pem_pkcs8()?;
+    Ok(pem)
+}
 
-    fn make_private_pem() -> Result<Vec<u8>, ErrorStack> {
-        let rsa = Rsa::generate(DESIRED_RSA_BITS)?;
-        let pkey = PKey::from_rsa(rsa)?;
-        let pem = pkey.private_key_to_pem_pkcs8()?;
-        return Ok(pem);
-    }
-
-    let pemdata = match make_private_pem() {
-        Ok(c) => c,
+/// Create a new private key and return it
+pub fn create_private_key() -> Result<Vec<u8>, String> {
+    match openssl_create_private_key(DESIRED_RSA_BITS) {
+        Ok(c) => Ok(c),
         Err(e) => {
             println!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
-            return Err("Could not create private RSA key".to_owned());
+            Err("Could not create private RSA key".to_owned())
         }
-    };
-    let mut file = std::fs::File::create(filename).unwrap();
-
-    file.write_all(&pemdata).unwrap();
-    println!(
-        "Wrote a new {} bit RSA key to file '{}'",
-        DESIRED_RSA_BITS, filename
-    );
-    Ok(())
+    }
 }
 
 /// Old caramel, before Open Source release, did not specify the order of the fields as strictly as today.
@@ -180,13 +119,27 @@ fn workaround_subject() -> (X509Name, X509Name) {
     return (subj_before, subj_after);
 }
 
+/// Convert the PEM data in ca_data into a certificate, and clone it's subject out.
+///
+fn clone_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
+    let ca_cert = X509::from_pem(&ca_data)?;
+    let mut ca_subject = X509Name::builder()?;
+    // From a cert we cannot get an _owned_ copy of the subject without loading if from a PEM file
+    // on disk.
+    // This iterates over the subject and copies it element-by-element instead, in order to make
+    // sure that we are the sole owner of all the subjects
+    for entry in ca_cert.subject_name().entries() {
+        let entry_nid = entry.object().nid();
+        let entry_text = entry.data().as_utf8()?;
+        ca_subject.append_entry_by_nid(entry_nid, &entry_text)?;
+    }
+    Ok(ca_subject.build())
+}
+
 /// Parse the cert-data from a file, returning an owned copy of a CA subject.
 /// This handles the data-replacement of our "known bad" compatibility subject as well.
-fn get_ca_subject(filename: &String) -> Result<X509Name, ErrorStack> {
-    let mut names = X509Name::load_client_ca_file(&filename)?;
-    assert!(names.len() == 1, "More than 1 name present in the CA cert");
-
-    let subject = names.pop().unwrap();
+fn get_ca_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
+    let subject = clone_subject(ca_data)?;
     let (before, after) = workaround_subject();
 
     // This should technically compare the two item-by-item
@@ -198,9 +151,9 @@ fn get_ca_subject(filename: &String) -> Result<X509Name, ErrorStack> {
         true => {
             println!(
                 "Backwards compat hack in place. Replacing subjects.
-Original: '{}'
+Original: '{:?}'
 Replaced: '{:?}'",
-                real_subj,
+                subject.as_ref(),
                 after.as_ref()
             );
             Ok(after)
@@ -217,7 +170,7 @@ Replaced: '{:?}'",
 ///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9`
 /// It passes through all data-points _except_ CommonName, which gets set to `client_id`
 /// This code works with OpenSSL datatypes and errors
-fn make_inner_subject(ca_subject: X509Name, clientid: &String) -> Result<X509Name, ErrorStack> {
+fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Name, ErrorStack> {
     use openssl::nid::Nid;
 
     let mut subject = X509Name::builder()?;
@@ -243,7 +196,7 @@ fn make_inner_subject(ca_subject: X509Name, clientid: &String) -> Result<X509Nam
 /// This means that all the other fields in the CA subject should match exactly.
 ///
 /// there is also a special case that is handled when reading out the CA certificate.
-fn make_subject(cacert_filename: &String, clientid: &String) -> Result<X509Name, String> {
+fn openssl_make_subject(cacert_data: &Vec<u8>, clientid: &str) -> Result<X509Name, ErrorStack> {
     //  This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
@@ -271,31 +224,16 @@ fn make_subject(cacert_filename: &String, clientid: &String) -> Result<X509Name,
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
-    let subj = match get_ca_subject(&cacert_filename) {
-        Ok(c) => c,
-        Err(e) => {
-            println!("Error parsing CA cert: {}", e);
-            return Err("Could not get subject from ca cert".to_owned());
-        }
-    };
+    let subj = get_ca_subject(&cacert_data)?;
     println!("Got ca subject   {:?}", subj.as_ref());
-    let new_subject = match make_inner_subject(subj, clientid) {
-        Ok(c) => c,
-        Err(e) => {
-            println!("Error building new subject: {}", e);
-            return Err("Could not create new subject from ca_cert".to_owned());
-        }
-    };
+    let new_subject = make_inner_subject(&subj, clientid)?;
     println!("Created new subject '{:?}'", new_subject.as_ref());
     Ok(new_subject)
 }
 
 /// See if commonname of the subject matches an expected clientid
 ///
-fn check_commoname_match(
-    subject: &x509::X509NameRef,
-    clientid: &String,
-) -> Result<bool, ErrorStack> {
+fn check_commoname_match(subject: &x509::X509NameRef, clientid: &str) -> Result<bool, ErrorStack> {
     use openssl::nid::Nid;
     let entry = subject.entries_by_nid(Nid::COMMONNAME).next().unwrap();
     let raw_name = entry.data().as_utf8()?;
@@ -310,37 +248,31 @@ fn check_commoname_match(
     Ok(true)
 }
 
+fn openssl_verify_csr(
+    csr_data: &Vec<u8>,
+    key_data: &Vec<u8>,
+    clientid: &str,
+) -> Result<bool, ErrorStack> {
+    let pkey = PKey::private_key_from_pem(&key_data)?;
+    let csr = X509Req::from_pem(&csr_data)?;
+    let verified = csr.verify(&pkey)?;
+    let subject = csr.subject_name();
+    let matching_name = check_commoname_match(subject, clientid)?;
+    Ok(verified && matching_name)
+}
+
 /// Verify that the Certificate Sign Request is valid according to our rules
 /// The Client ID must match our expected client-id
 /// The private key must match the Requests public key
 ///
 /// Left undone: Verfiy that the CSR checks out against the server
 
-pub fn verify_csr(
-    csr_filename: &String,
-    private_key_filename: &String,
-    clientid: &String,
-) -> Result<(), String> {
+pub fn verify_csr(csr_data: &Vec<u8>, key_data: &Vec<u8>, clientid: &str) -> Result<(), String> {
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
 
-    let pkey = load_private_key(private_key_filename)?;
-    let csr = load_csr_file(csr_filename)?;
-
-    fn check_csrdata(
-        csr: X509Req,
-        pkey: PKey<Private>,
-        clientid: &String,
-    ) -> Result<bool, ErrorStack> {
-        let verified = csr.verify(&pkey)?;
-        let subject = csr.subject_name();
-        let matching_name = check_commoname_match(subject, clientid)?;
-
-        Ok(verified && matching_name)
-    }
-
-    let valid = check_csrdata(csr, pkey, clientid);
+    let valid = openssl_verify_csr(csr_data, key_data, clientid);
     match valid {
         Ok(true) => Ok(()),
         Ok(false) => Err("CSR not signed by our private key".to_owned()),
@@ -351,41 +283,40 @@ pub fn verify_csr(
     }
 }
 
+pub fn openssl_verify_cert(
+    cert_data: &Vec<u8>,
+    ca_cert_data: &Vec<u8>,
+    key_data: &Vec<u8>,
+    clientid: &str,
+) -> Result<bool, ErrorStack> {
+    let private_key = PKey::private_key_from_pem(&key_data)?;
+    let ca_cert = X509::from_pem(&ca_cert_data)?;
+    let cert = X509::from_pem(&cert_data)?;
+
+    let subject = cert.subject_name();
+    let ca_pubkey = ca_cert.public_key()?;
+    let ok_name = check_commoname_match(subject, clientid)?;
+    let ok_signature = cert.verify(&ca_pubkey)?;
+    let cert_pubkey = cert.public_key()?;
+    let ok_key = private_key.public_eq(&cert_pubkey);
+    Ok(ok_name && ok_signature && ok_key)
+}
+
 /// Verify that the cert we downloaded matches what we want
 /// checks:
 ///     Private key corresponds to public key in the cert
 ///     subject/ Common name in cert matches our client id
 ///     Cert signature was signed by our expected CA cert
 pub fn verify_cert(
-    cert_file_name: &String,
-    ca_cert_file_name: &String,
-    private_key_file: &String,
-    clientid: &String,
+    cert_data: &Vec<u8>,
+    ca_cert_data: &Vec<u8>,
+    private_key: &Vec<u8>,
+    clientid: &str,
 ) -> Result<(), String> {
     /*
      * openssl verify -CAfile ca_cert_file_name, temp_cert_file_name
      */
-    let pkey = load_private_key(private_key_file)?;
-    let ca_cert = load_cert(ca_cert_file_name)?;
-    let cert = load_cert(cert_file_name)?;
-
-    fn check_cert_matching(
-        ca_cert: X509,
-        cert: X509,
-        private_key: PKey<Private>,
-        clientid: &String,
-    ) -> Result<bool, ErrorStack> {
-        let subject = cert.subject_name();
-        let ca_pubkey = ca_cert.public_key()?;
-        let ok_name = check_commoname_match(subject, clientid)?;
-        let ok_signature = cert.verify(&ca_pubkey)?;
-        let cert_pubkey = cert.public_key()?;
-        let ok_key = private_key.public_eq(&cert_pubkey);
-        Ok(ok_name && ok_signature && ok_key)
-    }
-
-    let valid = check_cert_matching(ca_cert, cert, pkey, clientid);
-    match valid {
+    match openssl_verify_cert(cert_data, ca_cert_data, private_key, clientid) {
         Ok(true) => Ok(()),
         Ok(false) => Err("Certificates load but do not match".to_owned()),
         Err(e) => {
@@ -399,9 +330,14 @@ pub fn verify_cert(
 /// Create a new CSR request from the OpenSSL Private key and Subject,
 /// returning the data as a PEM object vector.
 /// This function works on and with OpenSSL data-types.
-fn make_new_request(private_key: PKey<Private>, subject: X509Name) -> Result<Vec<u8>, ErrorStack> {
+fn openssl_create_csr(
+    private_key_data: &Vec<u8>,
+    subject: X509Name,
+) -> Result<Vec<u8>, ErrorStack> {
     use openssl::hash::MessageDigest;
     use openssl::x509::X509ReqBuilder;
+
+    let private_key = PKey::private_key_from_pem(private_key_data)?;
 
     let mut req_builder = X509ReqBuilder::new()?;
     req_builder.set_pubkey(&private_key)?;
@@ -414,12 +350,11 @@ fn make_new_request(private_key: PKey<Private>, subject: X509Name) -> Result<Vec
 
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
 /// placeholder
-pub fn create_csr_request(
-    csr_filename: &String,
-    cacert_filename: &String,
-    clientid: &String,
-    private_key_filename: &String,
-) -> Result<(), String> {
+pub fn create_csr(
+    cacert_data: &Vec<u8>,
+    private_key: &Vec<u8>,
+    clientid: &str,
+) -> Result<Vec<u8>, String> {
     /*
     config:
         [ req ]
@@ -473,19 +408,20 @@ pub fn create_csr_request(
      *   subject is the result of the above "make_subject" function
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
-    use std::io::prelude::*;
 
-    let subject = make_subject(&cacert_filename, &clientid)?;
-    let pkey = load_private_key(private_key_filename)?;
-
-    let pemdata = match make_new_request(pkey, subject) {
+    let subject = match openssl_make_subject(cacert_data, &clientid) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("OpenSSL Error building request: {}", e);
+            return Err("Error while building new CSR Subject ".to_owned());
+        }
+    };
+    let pemdata = match openssl_create_csr(private_key, subject) {
         Ok(c) => c,
         Err(e) => {
             println!("OpenSSL Error building request: {}", e);
             return Err("Error while building new Certificate Sign Request".to_owned());
         }
     };
-    let mut file = std::fs::File::create(csr_filename).unwrap();
-    file.write_all(&pemdata).unwrap();
-    Ok(())
+    Ok(pemdata)
 }

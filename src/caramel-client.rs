@@ -31,42 +31,64 @@ impl CertificateRequest {
         // 1. Test for cacert
         // 2. Download root.crt and save to cacert if not.
         // 3. Verify cacert can be loaded
-        if !Path::new(&self.ca_cert_file_name).exists() {
+        use std::fs::OpenOptions;
+        use std::io::prelude::*;
+        let ca_path = Path::new(&self.ca_cert_file_name);
+
+        if !ca_path.exists() {
             println!(
                 "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
-            network::fetch_root_cert(&self.server, &self.ca_cert_file_name)?;
+            let ca_data = network::fetch_root_cert(&self.server)?;
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&ca_path)
+                .unwrap();
+            // Write the content to file and be done
+            file.write_all(&ca_data).unwrap();
         }
-        certs::verify_cacert(&self.ca_cert_file_name)?;
-        Ok(())
+        let ca_data = std::fs::read(&ca_path).unwrap();
+        certs::verify_cacert(&ca_data)
     }
 
     pub fn ensure_key(&self) -> Result<(), String> {
         // should perform:
         // 1. If no private key exists, create a new one and save it.
         // 2. Verify existing key files can be loaded and have a proper size / validation
-        if !Path::new(&self.key_file_name).exists() {
-            certs::create_private_key(&self.key_file_name)?;
+        use std::io::prelude::*;
+        let key_path = Path::new(&self.key_file_name);
+
+        if !key_path.exists() {
+            let key_data = certs::create_private_key()?;
+            let mut file = std::fs::File::create(&key_path).unwrap();
+            file.write_all(&key_data).unwrap();
         }
-        certs::verify_private_key(&self.key_file_name)?;
-        Ok(())
+        let data = std::fs::read(&key_path).unwrap();
+        certs::verify_private_key(&data)
     }
+
     pub fn ensure_csr(&self) -> Result<(), String> {
         // should perform:
         // 1. If no CSR exist create a new one, building subject from "clientid" and "cacert"
         //    subjects
         // 2. Load the CSR and ensure that it's public key matches our private key
+        use std::io::prelude::*;
 
-        if !Path::new(&self.csr_file_name).exists() {
-            certs::create_csr_request(
-                &self.csr_file_name,
-                &self.ca_cert_file_name,
-                &self.client_id,
-                &self.key_file_name,
-            )?;
+        let ca_path = Path::new(&self.ca_cert_file_name);
+        let csr_path = Path::new(&self.csr_file_name);
+        let key_path = Path::new(&self.key_file_name);
+
+        let ca_data = std::fs::read(&ca_path).unwrap();
+        let key_data = std::fs::read(&key_path).unwrap();
+        if !csr_path.exists() {
+            let csrdata = certs::create_csr(&ca_data, &key_data, &self.client_id)?;
+            let mut file = std::fs::File::create(&csr_path).unwrap();
+            file.write_all(&csrdata).unwrap();
         }
-        certs::verify_csr(&self.csr_file_name, &self.key_file_name, &self.client_id)?;
+        let csr_data = std::fs::read(&csr_path).unwrap();
+        certs::verify_csr(&csr_data, &key_data, &self.client_id)?;
         Ok(())
     }
 
@@ -83,29 +105,40 @@ impl CertificateRequest {
         //      ( openssl verify, and make sure it matches our pub keypair)
         // 7. Replace existing cert with the new temp one.
         //    Only if the two differ, to avoid updating ctime/mtime on files unnecessarily.
-        //
-        if Path::new(&self.crt_file_name).exists() {
-            certs::verify_cert(
-                &self.crt_file_name,
-                &self.ca_cert_file_name,
-                &self.key_file_name,
-                &self.client_id,
-            )?;
+
+        let ca_path = Path::new(&self.ca_cert_file_name);
+        let crt_path = Path::new(&self.crt_file_name);
+        let key_path = Path::new(&self.key_file_name);
+        let ca_cert_data = std::fs::read(&ca_path).unwrap();
+        let key_data = std::fs::read(&key_path).unwrap();
+
+        if crt_path.exists() {
+            let cert_data = std::fs::read(&crt_path).unwrap();
+            let valid =
+                match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
+                    Ok(_) => println!("Valid cert"),
+                    Err(e) => println!("Invalid / error parsing: {}", e),
+                };
         }
 
         let temp_crt =
             network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
 
-        certs::verify_cert(
-            &temp_crt,
-            &self.ca_cert_file_name,
-            &self.key_file_name,
+        let valid = match certs::verify_cert(
+            &temp_crt.into_bytes(),
+            &ca_cert_data,
+            &key_data,
             &self.client_id,
-        )?;
-        println!(
-            "moving {} to {}",
-            &self.crt_temp_file_name, &self.crt_file_name
-        );
+        ) {
+            Ok(_) => {
+                println!("Valid cert, should compare and move");
+                println!(
+                    "moving {} to {}",
+                    &self.crt_temp_file_name, &self.crt_file_name
+                );
+            }
+            Err(e) => panic!("I don't know what to do with: {:?}", e),
+        };
         Err("Not implemented, ensure_crt".to_string())
     }
 }
