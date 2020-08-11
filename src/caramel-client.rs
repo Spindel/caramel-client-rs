@@ -1,5 +1,5 @@
-mod certs;
-mod network;
+use caramel_client::certs;
+use caramel_client::network;
 use log::{debug, error, info};
 use simple_logger;
 use std::path::Path;
