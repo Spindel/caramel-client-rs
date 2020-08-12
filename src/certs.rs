@@ -5,6 +5,8 @@ use openssl::rsa::Rsa;
 use openssl::x509;
 use openssl::x509::{X509Name, X509NameRef, X509Req, X509};
 
+pub mod blobs;
+
 // Encoded in upstream definitions
 const MAX_CN_LENGTH: usize = 64;
 
@@ -425,4 +427,17 @@ pub fn create_csr(
         }
     };
     Ok(pemdata)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::certs::blobs::testdata::{convert_string_to_vec8, TOO_SMALL_KEY_DATA1};
+
+    #[test]
+    fn test_fail_on_key_with_to_few_bits() {
+        let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
+        let result = verify_private_key(&key_with_too_few_bits);
+        assert!(result.is_err());
+    }
 }

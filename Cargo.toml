@@ -1,5 +1,5 @@
 [package]
-name = "caramel-client-rs"
+name = "caramel-client"
 version = "0.1.0"
 authors = ["robert.svensk <robert.svensk@hiq.se>"]
 edition = "2018"
