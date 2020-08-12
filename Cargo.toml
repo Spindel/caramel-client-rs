@@ -7,9 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-openssl = {version = "0.10", features = ["vendored"]}
 curl = {version = "0.4.3"}
+log = "0.4"
+openssl = {version = "0.10", features = ["vendored"]}
 sha2 = "0.9.1"
+simple_logger = "1.6"
 
 [[bin]]
 name = "caramel-client-rs"

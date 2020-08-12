@@ -1,5 +1,7 @@
 mod certs;
 mod network;
+use log::{debug, error, info};
+use simple_logger;
 use std::path::Path;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
@@ -36,7 +38,7 @@ impl CertificateRequest {
         let ca_path = Path::new(&self.ca_cert_file_name);
 
         if !ca_path.exists() {
-            println!(
+            info!(
                 "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
@@ -116,8 +118,8 @@ impl CertificateRequest {
             let cert_data = std::fs::read(&crt_path).unwrap();
             let valid =
                 match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
-                    Ok(_) => println!("Valid cert"),
-                    Err(e) => println!("Invalid / error parsing: {}", e),
+                    Ok(_) => debug!("Valid cert"),
+                    Err(e) => error!("Invalid / error parsing: {}", e),
                 };
         }
 
@@ -131,8 +133,8 @@ impl CertificateRequest {
             &self.client_id,
         ) {
             Ok(_) => {
-                println!("Valid cert, should compare and move");
-                println!(
+                debug!("Valid cert, should compare and move");
+                debug!(
                     "moving {} to {}",
                     &self.crt_temp_file_name, &self.crt_file_name
                 );
@@ -147,7 +149,7 @@ fn certificate_request(
     server: String,
     client_id: String,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    println!("Server: {} client_id: {}", server, client_id);
+    info!("Server: {} client_id: {}", server, client_id);
 
     // Create request info
     let request_info = CertificateRequest::new(server, client_id);
@@ -165,7 +167,7 @@ fn certificate_request(
 fn read_cmd_input() -> Result<(String, String), String> {
     let mut args: Vec<String> = std::env::args().collect();
 
-    println!("{:?}", args); // DEBUG PRINT
+    debug!("{:?}", args); // DEBUG PRINT
 
     let length = args.len();
     match length {
@@ -184,6 +186,7 @@ fn read_cmd_input() -> Result<(String, String), String> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    simple_logger::init_with_level(log::Level::Debug).unwrap();
     let (server, client_id) = read_cmd_input()?;
     let res = certificate_request(server, client_id);
 
@@ -191,7 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("{}", res.unwrap_err().to_string());
         std::process::exit(1);
     } else {
-        println!("Certificate Success");
+        info!("Certificate Success");
         Ok(())
     }
 }
