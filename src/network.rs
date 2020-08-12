@@ -2,7 +2,6 @@ mod hexsum;
 
 use curl::easy::Easy;
 use std::fs::File;
-use std::io::{stdout, Write};
 use std::path::Path;
 
 pub enum CertState {
@@ -15,15 +14,12 @@ pub enum CertState {
 /// Will fail violently if the file already exists
 /// Will fail if the server is not valid against our default CA-store
 ///
-pub fn fetch_root_cert(server: &String, filename: &String) -> Result<(), String> {
+pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
     // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) cert for this
     //    server.
-    // 4. Download the cert, save to temp file
-    // 5. atomically move temp cert to our filename
-    use std::fs::OpenOptions;
-
+    // 4. Download the cert, return it
     let url = format!("https://{}/root.crt", server);
     println!("Attempting to fetch CA cert from {}", url);
 
@@ -65,20 +61,7 @@ pub fn fetch_root_cert(server: &String, filename: &String) -> Result<(), String>
             }
         }
     }
-
-    // Open the file for writing with "Create new" option, which causes a failure if this file
-    // already exists.
-    // We only perform this _after_ we have downloaded the certificate, to make sure we do not
-    // leave an empty file around.
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&filename)
-        .unwrap();
-
-    // Write the content to file and be done
-    file.write_all(&content).unwrap();
-    Ok(())
+    Ok(content)
 }
 
 /// Assuming that a certificate file does not exist on the server, post the file.
@@ -172,7 +155,6 @@ pub fn get_crt(server: &String, ca_cert: &String, csr_filename: &String) -> Resu
     //
     //     Other return codes? Treat as an error
     //
-    use std::fs::OpenOptions;
     let handle = get_curl_handle(&server, &ca_cert)?;
     post_csr(handle, &csr_filename).unwrap();
     Err("get_crt is not implemented yet".to_owned())
