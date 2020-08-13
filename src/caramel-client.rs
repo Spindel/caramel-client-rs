@@ -163,7 +163,7 @@ fn certificate_request(
     Ok("Received Certificate".into())
 }
 
-/// Parse the commandline, returning server and client_id
+/// Parse the commandline, returning `server` and `client_id`
 /// Alternatively, an error message in an Err
 ///
 fn read_cmd_input() -> Result<(String, String), String> {
