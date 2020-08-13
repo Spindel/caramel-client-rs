@@ -215,3 +215,57 @@ pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertStat
     let mut handle = curl_get_handle(&server, &ca_cert)?;
     inner_get_crt(&mut handle, &url)
 }
+
+/// Internal function that posts a CSR to the url
+///
+/// Returns status code
+///
+/// Errors:
+/// returns all curl errors
+fn curl_post_csr(handle: &mut Easy, url: &str, mut csr_data: &[u8]) -> Result<u32, curl::Error> {
+    use std::io::Read;
+    handle.url(&url)?;
+    handle.post(true)?;
+    handle.post_field_size(csr_data.len() as u64)?;
+    // Start a scope here. Since the `transfer` is created inside this scope, and then transfer
+    // gets the closure which posts the data, and after this block, `transfer` is no more.
+    // For the compiler, that means that `csr_data` is no longer accessed outside this block, and
+    // the lifetime is thus managed.
+    {
+        let mut transfer = handle.transfer();
+        transfer.read_function(|into| {
+            // "as_slice" means that we can use the Reader protocol on a vector
+            // https://doc.rust-lang.org/std/io/trait.Read.html
+            let len = csr_data.read(into).unwrap_or(0);
+            Ok(len)
+        })?;
+        transfer.perform()?;
+    }
+    let status_code = handle.response_code()?;
+    debug!("POST {}, status={}", url, status_code);
+    Ok(status_code)
+}
+
+/// Internal funnction to post a CSR to the server, using an already configured `handle`
+///
+fn inner_post_csr(handle: &mut Easy, url: &str, csr_data: &[u8]) -> Result<CertState, Error> {
+    let status_code = curl_post_csr(handle, url, csr_data)?;
+    match status_code {
+        200 | 202 => Ok(CertState::Pending),
+        _ => Err(Error::Unknown),
+    }
+}
+
+/// Assuming that a certificate file does not exist on the `server`, post `csr_data` to a name
+/// calculated by the contents of `csr_data`
+///
+#[allow(dead_code)]
+pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, Error> {
+    let hexname = hexsum::sha256hex(csr_data);
+    let url = format!("https://{}/{}", server, hexname);
+
+    let mut handle = curl_get_handle(&server, &ca_cert)?;
+
+    info!("About to post CSR to: {}", url);
+    inner_post_csr(&mut handle, &url, csr_data)
+}
