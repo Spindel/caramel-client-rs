@@ -71,7 +71,7 @@ pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
 /// Assuming that a certificate file does not exist on the server, post the file.
 /// Internal use, handle is an already initialized and configured curl handle with the correct
 /// logic for data
-fn post_csr(handle: curl::easy::Easy, csr_filename: &String) -> Result<(), String> {
+fn post_csr(_handle: curl::easy::Easy, csr_filename: &String) -> Result<(), String> {
     use std::io::prelude::*;
 
     let path = Path::new(&csr_filename);
@@ -127,9 +127,30 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
     };
 
     // Force a re-connect on the next run
-    handle.fresh_connect(true);
+    match handle.fresh_connect(true) {
+        Ok(_) => {
+            debug!("Got a fresh connect");
+        }
+        Err(e) => {
+            error!("Failed to perform a fresh connect. \n{}", e);
+        }
+    };
+
     let ca_path = Path::new(&ca_cert);
-    handle.cainfo(ca_path);
+
+    // Force a re-connect on the next run
+    match handle.cainfo(ca_path) {
+        Ok(_) => {
+            debug!("Got a re-connect with certificate {:?}", ca_cert);
+            return Ok(handle);
+        }
+        Err(e) => {
+            error!(
+                "Failed to perform a re-connect with certificate {}. \n{}",
+                ca_cert, e
+            );
+        }
+    };
 
     match handle.perform() {
         Ok(_) => {
@@ -137,7 +158,10 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
             return Ok(handle);
         }
         Err(e) => {
-            error!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
+            error!(
+                "Failed to connect with {:?} as certificate. \n{}",
+                ca_cert, e
+            );
         }
     };
     Err("Unable to get a connection".to_owned())
