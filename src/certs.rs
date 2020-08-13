@@ -14,7 +14,7 @@ pub mod blobs;
 const MAX_CN_LENGTH: usize = 64;
 
 const DESIRED_RSA_BITS: u32 = 2048;
-const MIN_RSA_BITS: u32 = 2048;
+pub const MIN_RSA_BITS: u32 = 2048;
 
 fn openssl_verify_cacert(contents: &Vec<u8>) -> Result<bool, ErrorStack> {
     let cacert = X509::from_pem(&contents)?;

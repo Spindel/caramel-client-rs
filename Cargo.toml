@@ -16,6 +16,7 @@ log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
 sha2 = "0.9.1"
 simple_logger = "1.6"
+thiserror = "1.0"
 
 [[bin]]
 name = "caramel-client-rs"
