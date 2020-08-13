@@ -172,18 +172,14 @@ fn read_cmd_input() -> Result<(String, String), String> {
     debug!("{:?}", args); // DEBUG PRINT
 
     let length = args.len();
-    match length {
-        3 => {
-            let client_id = args.pop().unwrap();
-            let server = args.pop().unwrap();
-            Ok((server, client_id))
-        }
-
-        _ => {
-            let program = args.first().unwrap();
-            let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
-            Err(err_msg)
-        }
+    if length == 3 {
+        let client_id = args.pop().unwrap();
+        let server = args.pop().unwrap();
+        Ok((server, client_id))
+    } else {
+        let program = args.first().unwrap();
+        let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
+        Err(err_msg)
     }
 }
 
