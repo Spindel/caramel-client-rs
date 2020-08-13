@@ -16,7 +16,7 @@ const MAX_CN_LENGTH: usize = 64;
 const DESIRED_RSA_BITS: u32 = 2048;
 pub const MIN_RSA_BITS: u32 = 2048;
 
-fn openssl_verify_cacert(contents: &Vec<u8>) -> Result<bool, ErrorStack> {
+fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
     let cacert = X509::from_pem(&contents)?;
     info!("Got CA cert: {:?}", cacert);
     let pkey = cacert.public_key()?;
@@ -25,7 +25,7 @@ fn openssl_verify_cacert(contents: &Vec<u8>) -> Result<bool, ErrorStack> {
 }
 
 /// Load and verify that the CACert is okay.
-pub fn verify_cacert(contents: &Vec<u8>) -> Result<(), String> {
+pub fn verify_cacert(contents: &[u8]) -> Result<(), String> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
@@ -41,7 +41,7 @@ pub fn verify_cacert(contents: &Vec<u8>) -> Result<(), String> {
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
 /// should probably take a path or similar rather than a string.
-pub fn verify_private_key(contents: &Vec<u8>) -> Result<(), String> {
+pub fn verify_private_key(contents: &[u8]) -> Result<(), String> {
     // Matching of
     /*
         openssl pkey -noout -in $filename
@@ -127,7 +127,7 @@ fn workaround_subject() -> (X509Name, X509Name) {
 
 /// Convert the PEM data in ca_data into a certificate, and clone it's subject out.
 ///
-fn clone_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
+fn clone_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
     let ca_cert = X509::from_pem(&ca_data)?;
     let mut ca_subject = X509Name::builder()?;
     // From a cert we cannot get an _owned_ copy of the subject without loading if from a PEM file
@@ -144,7 +144,7 @@ fn clone_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
 
 /// Parse the cert-data from a file, returning an owned copy of a CA subject.
 /// This handles the data-replacement of our "known bad" compatibility subject as well.
-fn get_ca_subject(ca_data: &Vec<u8>) -> Result<X509Name, ErrorStack> {
+fn get_ca_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
     let subject = clone_subject(ca_data)?;
     let (before, after) = workaround_subject();
 
@@ -202,7 +202,7 @@ fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Na
 /// This means that all the other fields in the CA subject should match exactly.
 ///
 /// there is also a special case that is handled when reading out the CA certificate.
-fn openssl_make_subject(cacert_data: &Vec<u8>, clientid: &str) -> Result<X509Name, ErrorStack> {
+fn openssl_make_subject(cacert_data: &[u8], clientid: &str) -> Result<X509Name, ErrorStack> {
     //  This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
@@ -255,8 +255,8 @@ fn check_commoname_match(subject: &x509::X509NameRef, clientid: &str) -> Result<
 }
 
 fn openssl_verify_csr(
-    csr_data: &Vec<u8>,
-    key_data: &Vec<u8>,
+    csr_data: &[u8],
+    key_data: &[u8],
     clientid: &str,
 ) -> Result<bool, ErrorStack> {
     let pkey = PKey::private_key_from_pem(&key_data)?;
@@ -273,7 +273,7 @@ fn openssl_verify_csr(
 ///
 /// Left undone: Verfiy that the CSR checks out against the server
 
-pub fn verify_csr(csr_data: &Vec<u8>, key_data: &Vec<u8>, clientid: &str) -> Result<(), String> {
+pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<(), String> {
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
@@ -290,9 +290,9 @@ pub fn verify_csr(csr_data: &Vec<u8>, key_data: &Vec<u8>, clientid: &str) -> Res
 }
 
 pub fn openssl_verify_cert(
-    cert_data: &Vec<u8>,
-    ca_cert_data: &Vec<u8>,
-    key_data: &Vec<u8>,
+    cert_data: &[u8],
+    ca_cert_data: &[u8],
+    key_data: &[u8],
     clientid: &str,
 ) -> Result<bool, ErrorStack> {
     let private_key = PKey::private_key_from_pem(&key_data)?;
@@ -314,9 +314,9 @@ pub fn openssl_verify_cert(
 ///     subject/ Common name in cert matches our client id
 ///     Cert signature was signed by our expected CA cert
 pub fn verify_cert(
-    cert_data: &Vec<u8>,
-    ca_cert_data: &Vec<u8>,
-    private_key: &Vec<u8>,
+    cert_data: &[u8],
+    ca_cert_data: &[u8],
+    private_key: &[u8],
     clientid: &str,
 ) -> Result<(), String> {
     /*
@@ -336,10 +336,7 @@ pub fn verify_cert(
 /// Create a new CSR request from the OpenSSL Private key and Subject,
 /// returning the data as a PEM object vector.
 /// This function works on and with OpenSSL data-types.
-fn openssl_create_csr(
-    private_key_data: &Vec<u8>,
-    subject: X509Name,
-) -> Result<Vec<u8>, ErrorStack> {
+fn openssl_create_csr(private_key_data: &[u8], subject: X509Name) -> Result<Vec<u8>, ErrorStack> {
     use openssl::hash::MessageDigest;
     use openssl::x509::X509ReqBuilder;
 
@@ -357,8 +354,8 @@ fn openssl_create_csr(
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
 /// placeholder
 pub fn create_csr(
-    cacert_data: &Vec<u8>,
-    private_key: &Vec<u8>,
+    cacert_data: &[u8],
+    private_key: &[u8],
     clientid: &str,
 ) -> Result<Vec<u8>, String> {
     /*

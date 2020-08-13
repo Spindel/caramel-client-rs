@@ -21,8 +21,8 @@ struct CertificateRequest {
 impl CertificateRequest {
     pub fn new(server: String, client_id: String) -> CertificateRequest {
         CertificateRequest {
-            server: format!("{}", &server),
-            client_id: format!("{}", &client_id),
+            server: server.to_string(),
+            client_id: client_id.to_string(),
             key_file_name: format!("{}{}", &client_id, ".key"),
             csr_file_name: format!("{}{}", &client_id, ".csr"),
             crt_temp_file_name: format!("{}{}", &client_id, ".temp"),
