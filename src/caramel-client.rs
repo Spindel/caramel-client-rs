@@ -4,6 +4,8 @@
 use caramel_client::certs;
 use caramel_client::network;
 use log::{debug, error, info};
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 use std::path::Path;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
@@ -12,7 +14,6 @@ struct CertificateRequest {
     client_id: String,
     key_file_name: String,
     csr_file_name: String,
-    crt_temp_file_name: String,
     crt_file_name: String,
     ca_cert_file_name: String,
 }
@@ -24,19 +25,14 @@ impl CertificateRequest {
             client_id: client_id.to_string(),
             key_file_name: format!("{}{}", &client_id, ".key"),
             csr_file_name: format!("{}{}", &client_id, ".csr"),
-            crt_temp_file_name: format!("{}{}", &client_id, ".temp"),
             crt_file_name: format!("{}{}", &client_id, ".crt"),
             ca_cert_file_name: format!("{}{}", &server, ".cacert"),
         }
     }
 
+    /// If no CA certificate exists, download it and save to disk
+    /// Will always verify the CA certificate according to some basic parsing rules.
     pub fn ensure_cacert(&self) -> Result<(), String> {
-        // should perform:
-        // 1. Test for cacert
-        // 2. Download root.crt and save to cacert if not.
-        // 3. Verify cacert can be loaded
-        use std::fs::OpenOptions;
-        use std::io::prelude::*;
         let ca_path = Path::new(&self.ca_cert_file_name);
 
         if !ca_path.exists() {
@@ -57,11 +53,11 @@ impl CertificateRequest {
         certs::verify_cacert(&ca_data)
     }
 
+    /// Ensure that a local key exists in our key filename.
+    /// 1. If no private key exists, create one and save to disk.
+    /// 2. Verify existing key file can be loaded and passes our validation
+    ///
     pub fn ensure_key(&self) -> Result<(), String> {
-        // should perform:
-        // 1. If no private key exists, create a new one and save it.
-        // 2. Verify existing key files can be loaded and have a proper size / validation
-        use std::io::prelude::*;
         let key_path = Path::new(&self.key_file_name);
 
         if !key_path.exists() {
@@ -73,13 +69,13 @@ impl CertificateRequest {
         certs::verify_private_key(&data)
     }
 
+    /// Ensure that a local CSR (Certificate Sign Request) exists in our csr filename
+    /// 1. If no CSR exists, will create a new one, basing the subject on clientid and CA
+    ///    certificate.
+    /// 2. Load the CSR from disk and ensure that our private key matches the CSR request public
+    ///    key.
+    ///
     pub fn ensure_csr(&self) -> Result<(), String> {
-        // should perform:
-        // 1. If no CSR exist create a new one, building subject from "clientid" and "cacert"
-        //    subjects
-        // 2. Load the CSR and ensure that it's public key matches our private key
-        use std::io::prelude::*;
-
         let ca_path = Path::new(&self.ca_cert_file_name);
         let csr_path = Path::new(&self.csr_file_name);
         let key_path = Path::new(&self.key_file_name);
@@ -96,20 +92,14 @@ impl CertificateRequest {
         Ok(())
     }
 
+    /// Attempt to ensure that we get a fresh certificate from the server
+    /// 1. Attempt to download a certificate matching our CSR
+    /// 2. Post the CSR to the server if needed
+    /// 3. Loops a few times to let automatic server signing finish signing a CSR
+    /// 4. Downloads a certificate if we have one
+    /// 5. Validates that the downloaded certificate matches our CSR and our Private Key
+    /// 6. Stores the result on disk.
     pub fn ensure_crt(&self) -> Result<(), String> {
-        // Should perform:
-        // 1. sha256sum of the CSR file
-        // 2. try to GET the crt from the server  https://ca/{sha256(csr)}
-        // 2a. Default to trusting the public PKI
-        // 2b. If TLS error, add the cacert to the list of verifying certs for this connection
-        // 3. If we get 404, Post the CSR to the server
-        // 4. If we get 202 or 304,  wait?
-        // 5. If we get 200, save the cert to a temp place
-        // 6. If we get a cert, verify that it's valid
-        //      ( openssl verify, and make sure it matches our pub keypair)
-        // 7. Replace existing cert with the new temp one.
-        //    Only if the two differ, to avoid updating ctime/mtime on files unnecessarily.
-
         let ca_path = Path::new(&self.ca_cert_file_name);
         let crt_path = Path::new(&self.crt_file_name);
         let key_path = Path::new(&self.key_file_name);
@@ -135,10 +125,7 @@ impl CertificateRequest {
         ) {
             Ok(_) => {
                 debug!("Valid cert, should compare and move");
-                debug!(
-                    "moving {} to {}",
-                    &self.crt_temp_file_name, &self.crt_file_name
-                );
+                debug!("moving to {}", &self.crt_file_name);
             }
             Err(e) => panic!("I don't know what to do with: {:?}", e),
         };
