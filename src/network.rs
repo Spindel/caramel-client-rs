@@ -269,3 +269,56 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
     info!("About to post CSR to: {}", url);
     inner_post_csr(&mut handle, &url, csr_data)
 }
+
+/// Calculate an exponential backoff.
+#[allow(dead_code)]
+fn calculate_backoff(count: usize) -> std::time::Duration {
+    use std::cmp::{max, min};
+    use std::convert::TryInto;
+    use std::time::Duration;
+    // Note, this could be improved by adding a jitter to it
+    // https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+
+    const MAX: Duration = Duration::from_secs(15);
+    const BASE: Duration = Duration::from_millis(25);
+    const TWO: u32 = 2;
+
+    let count = max(1, count);
+    let attempt: u32 = count.try_into().unwrap_or(100);
+    let duration: u32 = TWO.saturating_pow(attempt);
+
+    let delay: Duration = BASE * duration;
+    min(MAX, delay)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::calculate_backoff;
+    use std::time::Duration;
+
+    #[test]
+    fn test_backoff() {
+        const BIG_DUR: Duration = Duration::from_secs(60);
+        const SMALL_DUR: Duration = Duration::from_millis(25);
+
+        let zero = calculate_backoff(0);
+        assert!(zero < BIG_DUR);
+        assert!(zero > SMALL_DUR);
+
+        let one = calculate_backoff(1);
+        assert!(one < BIG_DUR);
+        assert!(one > SMALL_DUR);
+        assert!(one >= zero);
+
+        let thousand = calculate_backoff(1000);
+        assert!(thousand < BIG_DUR);
+        assert!(thousand > SMALL_DUR);
+        assert!(thousand >= one);
+
+        // number is larger than u32, make sure wrap logic works
+        let bignum = calculate_backoff(8589934592);
+        assert!(bignum < BIG_DUR);
+        assert!(bignum > SMALL_DUR);
+        assert!(bignum >= thousand);
+    }
+}
