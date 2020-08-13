@@ -88,9 +88,9 @@ impl CertificateRequest {
         let csr_path = Path::new(&self.csr_file_name);
         let key_path = Path::new(&self.key_file_name);
 
-        let ca_data = std::fs::read(&ca_path).unwrap();
         let key_data = std::fs::read(&key_path).unwrap();
         if !csr_path.exists() {
+            let ca_data = std::fs::read(&ca_path).unwrap();
             let csrdata = certs::create_csr(&ca_data, &key_data, &self.client_id)?;
             let mut file = std::fs::File::create(&csr_path).unwrap();
             file.write_all(&csrdata).unwrap();
@@ -110,21 +110,12 @@ impl CertificateRequest {
     pub fn ensure_crt(&self) -> Result<(), String> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let crt_path = Path::new(&self.crt_file_name);
-        let key_path = Path::new(&self.key_file_name);
-        let ca_cert_data = std::fs::read(&ca_path).unwrap();
         let csr_path = Path::new(&self.csr_file_name);
-        let key_data = std::fs::read(&key_path).unwrap();
+        let key_path = Path::new(&self.key_file_name);
 
-        if crt_path.exists() {
-            let cert_data = std::fs::read(&crt_path).unwrap();
-            match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
-                Ok(_) => debug!("Valid cert"),
-                Err(e) => error!("Invalid / error parsing: {}", e),
-            };
-        }
         let csr_data = std::fs::read(&csr_path).unwrap();
+        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data, 12);
 
-        let res = network::get_crt(&self.server, &ca_path, &csr_data);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, Pending signature"),
@@ -133,15 +124,31 @@ impl CertificateRequest {
             Err(e) => panic!("Unknown error. cannot cope: {}", e),
         };
 
-        let _valid = match certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id)
-        {
-            Ok(_) => {
-                debug!("Valid cert, should compare and move");
-                debug!("moving to {}", &self.crt_file_name);
+        let ca_cert_data = std::fs::read(&ca_path).unwrap();
+        let key_data = std::fs::read(&key_path).unwrap();
+        let valid = certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id);
+        if valid.is_err() {
+            error!("Invalid cert from server: {:?}", valid);
+            return Err("Invalid cert from server".to_owned());
+        }
+
+        if crt_path.exists() {
+            let cert_data = std::fs::read(&crt_path).unwrap();
+            if cert_data == temp_crt {
+                info!("Nothing to do, certificate {:?} unchanged", crt_path);
+                return Ok(());
             }
-            Err(e) => panic!("I don't know what to do with: {:?}", e),
-        };
-        Err("Not implemented, ensure_crt".to_string())
+        }
+        // We explicitly open for over-write here as we either have a new file, or are writing a
+        // new certificate to the file.
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&crt_path)
+            .unwrap();
+        // Write the content to file and be done
+        file.write_all(&temp_crt).unwrap();
+        Ok(())
     }
 }
 
