@@ -34,7 +34,7 @@ pub fn verify_cacert(contents: &[u8]) -> Result<(), String> {
         Ok(false) => Err("CA cert not self-signed.".to_owned()),
         Err(e) => {
             error!("Error parsing CA cert: {}", e);
-            return Err("Unable to parse CA cert".to_owned());
+            Err("Unable to parse CA cert".to_owned())
         }
     }
 }
@@ -122,7 +122,7 @@ fn workaround_subject() -> (X509Name, X509Name) {
         .unwrap();
     let subj_after = after.build();
 
-    return (subj_before, subj_after);
+    (subj_before, subj_after)
 }
 
 /// Convert the PEM data in ca_data into a certificate, and clone it's subject out.
@@ -284,7 +284,7 @@ pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<()
         Ok(false) => Err("CSR not signed by our private key".to_owned()),
         Err(e) => {
             error!("Error parsing CSR: {}", e);
-            return Err("Unable to validate CSR".to_owned());
+            Err("Unable to validate CSR".to_owned())
         }
     }
 }
