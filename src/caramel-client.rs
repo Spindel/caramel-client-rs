@@ -18,7 +18,7 @@ struct CertificateRequest {
 }
 
 impl CertificateRequest {
-    pub fn new(server: String, client_id: String) -> CertificateRequest {
+    pub fn new(server: &str, client_id: &str) -> CertificateRequest {
         CertificateRequest {
             server: server.to_string(),
             client_id: client_id.to_string(),
@@ -148,13 +148,13 @@ impl CertificateRequest {
 }
 
 fn certificate_request(
-    server: String,
-    client_id: String,
+    server: &str,
+    client_id: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Server: {} client_id: {}", server, client_id);
 
     // Create request info
-    let request_info = CertificateRequest::new(server, client_id);
+    let request_info = CertificateRequest::new(&server, &client_id);
 
     request_info.ensure_key()?;
     request_info.ensure_cacert()?;
@@ -186,7 +186,7 @@ fn read_cmd_input() -> Result<(String, String), String> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_level(log::Level::Debug).unwrap();
     let (server, client_id) = read_cmd_input()?;
-    let res = certificate_request(server, client_id);
+    let res = certificate_request(&server, &client_id);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());
