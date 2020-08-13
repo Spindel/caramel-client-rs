@@ -25,6 +25,10 @@ fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
 }
 
 /// Load and verify that the CACert is okay.
+/// # Errors
+///
+/// Will Cause an error if passed invalid data  that cannot be parsed as
+/// a CA certificate
 pub fn verify_cacert(contents: &[u8]) -> Result<(), String> {
     /*
        openssl  verify  -CAfile  filename, filename
@@ -197,7 +201,7 @@ fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Na
     Ok(our_subject)
 }
 
-/// Create a subject from a CAcert + our expected clientid
+/// Create a subject from a `cacert_data` + our expected clientid
 /// The general case rule is to take the CA cert and _only_ replace the common name.
 /// This means that all the other fields in the CA subject should match exactly.
 ///
