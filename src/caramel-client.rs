@@ -40,7 +40,10 @@ impl CertificateRequest {
                 "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
-            let ca_data = network::fetch_root_cert(&self.server)?;
+            let ca_data = match network::fetch_root_cert(&self.server) {
+                Ok(data) => data,
+                Err(e) => return Err(format!("{}", e)),
+            };
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)

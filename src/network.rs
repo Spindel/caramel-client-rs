@@ -45,11 +45,46 @@ pub enum CertState {
     Downloaded(Vec<u8>),
 }
 
+/// Inner function that uses the curl api enr errors for `fetch_root_cert`
+/// `url` is a complete url
+/// `content` is where the resulting data will be saved
+/// Result is a status code and the same  `content` that got passed in
+///
+/// Errors:
+/// passes all curl errors through.
+fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>), curl::Error> {
+    let mut handle = Easy::new();
+    handle.url(&url)?;
+    handle.ssl_verify_host(true)?;
+    handle.ssl_verify_peer(true)?;
+    handle.ssl_min_max_version(
+        curl::easy::SslVersion::Tlsv11,
+        curl::easy::SslVersion::Tlsv13,
+    )?;
+
+    // Start a new block scope here, that allows it to access our buffer `content` exclusive or
+    // not, and then we can once more use it after the block scope.
+    // Lifetimes are fun, but this basically means that even if curl sends our buffers into a
+    // thread or similar, the compiler can track it and know that once we're out of this block,
+    // it's safe to access it again.
+    // At least that's how I'm sort of currently understanding how this works.
+    {
+        let mut transfer = handle.transfer();
+        transfer.write_function(|data| {
+            content.extend_from_slice(data);
+            Ok(data.len())
+        })?;
+        transfer.perform()?;
+    }
+    let status_code = handle.response_code()?;
+    Ok((status_code, content))
+}
+
 /// Fetch the root certificate if we do not have it already.
 /// Will fail violently if the file already exists
 /// Will fail if the server is not valid against our default CA-store
 ///
-pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, String> {
+pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
     // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) cert for this
@@ -60,43 +95,14 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, String> {
 
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this
-    let mut content = Vec::<u8>::with_capacity(4096);
+    let content = Vec::<u8>::with_capacity(4096);
 
-    let mut handle = Easy::new();
-    handle.url(&url).unwrap();
-    handle.ssl_verify_host(true).unwrap();
-    handle.ssl_verify_peer(true).unwrap();
-    handle
-        .ssl_min_max_version(
-            curl::easy::SslVersion::Tlsv11,
-            curl::easy::SslVersion::Tlsv13,
-        )
-        .unwrap();
-
-    // Start a new block scope here, that allows it to access our buffer `content` exclusive or
-    // not, and then we can once more use it after the block scope.
-    // Lifetimes are fun, but this basically means that even if curl sends our buffers into a
-    // thread or similar, the compiler can track it and know that once we're out of this block,
-    // it's safe to access it again.
-    // At least that's how I'm sort of currently understanding how this works.
-    {
-        let mut transfer = handle.transfer();
-        transfer
-            .write_function(|data| {
-                content.extend_from_slice(data);
-                Ok(data.len())
-            })
-            .unwrap();
-
-        match transfer.perform() {
-            Ok(_) => info!("Got a new CA certificate"),
-            Err(e) => {
-                error!("Error fetching certificate: {}", e);
-                return Err("Unable to fetch cert".to_owned());
-            }
-        }
+    let (status_code, content) = curl_fetch_root_cert(&url, content)?;
+    match status_code {
+        200 => Ok(content),
+        404 => Err(Error::NotFound),
+        _ => Err(Error::Unknown),
     }
-    Ok(content)
 }
 
 /// Assuming that a certificate file does not exist on the server, post the file.
@@ -159,7 +165,10 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
 
     // Force a re-connect on the next run
     handle.fresh_connect(true).unwrap();
+
     let ca_path = Path::new(&ca_cert);
+
+    // Force a re-connect on the next run
     handle.cainfo(ca_path).unwrap();
 
     match handle.perform() {
@@ -168,7 +177,10 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
             return Ok(handle);
         }
         Err(e) => {
-            error!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
+            error!(
+                "Failed to connect with {:?} as certificate. \n{}",
+                ca_cert, e
+            );
         }
     };
     Err("Unable to get a connection".to_owned())
@@ -191,6 +203,6 @@ pub fn get_crt(server: &str, ca_cert: &str, csr_filename: &str) -> Result<String
     //     Other return codes? Treat as an error
     //
     let handle = get_curl_handle(&server, &ca_cert)?;
-    post_csr(handle, csr_filename).unwrap();
+    post_csr(handle, &csr_filename).unwrap();
     Err("get_crt is not implemented yet".to_owned())
 }
