@@ -21,11 +21,11 @@ pub enum CaramelClientLibError {
     #[error("Could not create private RSA key")]
     PrivateKeyCreationError,
 
-    #[error("CA cert not self-signed")]
+    #[error("CA certificate not self-signed")]
     CaCertNotSelfSignedError,
 
     #[error("Unable to parse CA cert")]
-    CaCertParseFalure,
+    CaCertParseFailure,
 
     // network.rs errors
     #[error("Unable to download certificate")]
