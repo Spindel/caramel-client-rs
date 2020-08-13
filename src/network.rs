@@ -271,7 +271,6 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
 }
 
 /// Calculate an exponential backoff.
-#[allow(dead_code)]
 fn calculate_backoff(count: usize) -> std::time::Duration {
     use std::cmp::{max, min};
     use std::convert::TryInto;
@@ -284,11 +283,52 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
     const TWO: u32 = 2;
 
     let count = max(1, count);
+    // If count overflows into a u32, attempt it's a big number.
     let attempt: u32 = count.try_into().unwrap_or(100);
     let duration: u32 = TWO.saturating_pow(attempt);
 
     let delay: Duration = BASE * duration;
     min(MAX, delay)
+}
+
+/// Tries to ensure we can get a certificate
+/// 1. A get attempt is made to the server, if succesful, early exit
+/// 2. If not found, POST it to the server
+/// 3. If POST was succesful, iterate loop times:
+/// 4   Attempt to download and return the certificate
+/// 5. If all attempts fail (no signed certificate exists) error out
+pub fn post_and_get_crt(
+    server: &str,
+    ca_cert: &Path,
+    csr_data: &[u8],
+    loops: usize,
+) -> Result<CertState, Error> {
+    use std::thread::sleep;
+
+    let hexname = hexsum::sha256hex(csr_data);
+    let url = format!("https://{}/{}", server, hexname);
+
+    let mut handle = curl_get_handle(&server, &ca_cert)?;
+
+    for attempt in 0..loops {
+        match inner_get_crt(&mut handle, &url) {
+            // Pending, We sleep for a bit and try again
+            Ok(CertState::Pending) => {
+                let delay = calculate_backoff(attempt);
+                debug!("Sleeping for: {:?}", delay);
+                sleep(delay);
+            }
+            // all other Ok states ( Rejected, Downloaded, etc..  are passed through
+            Ok(c) => return Ok(c),
+            // Cert not found? Attempt to upload it.
+            Err(Error::NotFound) => {
+                info!("CSR not found on server, posting.");
+                let _discard_post_status = inner_post_csr(&mut handle, &url, csr_data)?;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(CertState::Pending)
 }
 
 #[cfg(test)]
