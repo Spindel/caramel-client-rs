@@ -7,11 +7,42 @@ use curl::easy::Easy;
 use log::{debug, error, info};
 use std::fs::File;
 use std::path::Path;
+use thiserror::Error;
 
-pub enum CertState {
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Unknown error happened in transfer")]
+    Unknown,
+    #[error("Error from Libcurl when fetching certificate")]
+    LibCurl,
+    #[error("The certificate was not found.")]
     NotFound,
+}
+
+impl From<curl::Error> for Error {
+    fn from(error: curl::Error) -> Self {
+        let desc = error.description();
+        let code = error.code();
+        let extra = error.extra_description();
+        error!(
+            "Error from libcurl. code='{}', description='{}', extra_description='{}'",
+            code,
+            desc,
+            extra.unwrap_or("")
+        );
+        Error::LibCurl
+    }
+}
+
+/// Enumeration reflecting the current state of this CSR
+///
+/// Pending: data has been posted to the server, but there is no signed cert to fetch
+/// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them
+/// Downloaded: We got a certificate from the server that can be used.
+pub enum CertState {
     Pending,
-    Done,
+    Rejected,
+    Downloaded(Vec<u8>),
 }
 
 /// Fetch the root certificate if we do not have it already.
