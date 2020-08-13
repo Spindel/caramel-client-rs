@@ -81,7 +81,6 @@ fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>
 
 /// Fetch the root certificate if we do not have it already.
 /// Will fail if the server is not valid against our default CA-store
-///
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
@@ -106,7 +105,6 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
 /// Creates a curl handle, attempting connections to the server using both public PKI keys and if
 /// that fails, the local  `ca_cert ` from the path.
 /// Returns either a handle, or the last connection error from curl
-///
 fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
@@ -142,7 +140,7 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
         }
         Err(e) => {
             error!(
-                "Failed to connect with {:?} as certificate. \n{}",
+                "Failed to connect with {:?} as CA certificate. \n{}",
                 ca_cert, e
             );
             Err(e)
@@ -157,7 +155,6 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
 ///
 /// Errors:
 /// returns all curl errors
-///
 fn curl_get_crt(handle: &mut Easy, url: &str, content: &mut Vec<u8>) -> Result<u32, curl::Error> {
     handle.url(&url)?;
     handle.post(false)?;
@@ -179,7 +176,6 @@ fn curl_get_crt(handle: &mut Easy, url: &str, content: &mut Vec<u8>) -> Result<u
 /// Internal function that downloads the certificate
 /// Using `handle` and assumes that our setup is complete.
 /// Mostly only does memory allocation and parsing of status code into results or error.
-///
 fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, Error> {
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this.
@@ -198,17 +194,8 @@ fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, Error> {
 /// 1. Get the required connection information (tls, curl handle, etc)
 /// 2. Calculate sha256sum of our csr to post to the server.
 /// 3. Attempt to download a fresh certificate and return it.
-///
 #[allow(dead_code)]
 pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, Error> {
-    // Try GET on the url:
-    //     if 200:  return
-    //     if 202: Do nothing, we are waiting for the server to sign
-    //     if 304: Do nothing. We are waiting for the server
-    //     if 404:  post csr to url and re-do
-    //
-    //     Other return codes? Treat as an error
-    //
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
     info!("Attempting to download certificate from: {}", url);
@@ -246,8 +233,8 @@ fn curl_post_csr(handle: &mut Easy, url: &str, mut csr_data: &[u8]) -> Result<u3
     Ok(status_code)
 }
 
-/// Internal funnction to post a CSR to the server, using an already configured `handle`
-///
+/// Internal function to post a CSR to the server, using an already configured `handle`
+/// Mainly exists to parse the resulting status code into a proper state and error handoff.
 fn inner_post_csr(handle: &mut Easy, url: &str, csr_data: &[u8]) -> Result<CertState, Error> {
     let status_code = curl_post_csr(handle, url, csr_data)?;
     match status_code {
@@ -258,7 +245,6 @@ fn inner_post_csr(handle: &mut Easy, url: &str, csr_data: &[u8]) -> Result<CertS
 
 /// Assuming that a certificate file does not exist on the `server`, post `csr_data` to a name
 /// calculated by the contents of `csr_data`
-///
 #[allow(dead_code)]
 pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, Error> {
     let hexname = hexsum::sha256hex(csr_data);
