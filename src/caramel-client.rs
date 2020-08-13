@@ -119,7 +119,7 @@ impl CertificateRequest {
 
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
-            let valid =
+            let _valid =
                 match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
                     Ok(_) => debug!("Valid cert"),
                     Err(e) => error!("Invalid / error parsing: {}", e),
@@ -129,7 +129,7 @@ impl CertificateRequest {
         let temp_crt =
             network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
 
-        let valid = match certs::verify_cert(
+        let _valid = match certs::verify_cert(
             &temp_crt.into_bytes(),
             &ca_cert_data,
             &key_data,
