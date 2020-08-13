@@ -117,15 +117,17 @@ impl CertificateRequest {
             };
         }
 
-        let temp_crt =
-            network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
+        let res = network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name);
+        let temp_crt = match res {
+            Ok(network::CertState::Downloaded(data)) => data,
+            Ok(network::CertState::Pending) => panic!("Not implemented, Pending signature"),
+            Ok(network::CertState::Rejected) => panic!("Not implemented, delete rejected crt/key"),
+            Err(network::Error::NotFound) => panic!("Not found is not supposed to happen"),
+            Err(e) => panic!("Unknown error. cannot cope: {}", e),
+        };
 
-        match certs::verify_cert(
-            &temp_crt.into_bytes(),
-            &ca_cert_data,
-            &key_data,
-            &self.client_id,
-        ) {
+        let _valid = match certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id)
+        {
             Ok(_) => {
                 debug!("Valid cert, should compare and move");
                 debug!("moving to {}", &self.crt_file_name);

@@ -108,6 +108,7 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
 /// Assuming that a certificate file does not exist on the server, post the file.
 /// Internal use, handle is an already initialized and configured curl handle with the correct
 /// logic for data
+#[allow(dead_code)]
 fn post_csr(_handle: curl::easy::Easy, csr_filename: &str) -> Result<(), String> {
     use std::io::prelude::*;
 
@@ -136,7 +137,7 @@ fn post_csr(_handle: curl::easy::Easy, csr_filename: &str) -> Result<(), String>
 /// 3a. Return handle if that works
 /// 4. failure
 ///
-fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, String> {
+fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, curl::Error> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
     // If that _fails_ because fex. SSL certificate failure, we add the ca_cert to the SSL
@@ -144,17 +145,15 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
     // If that succeeds, we return success.
     // Otherwise, fail hard as we cannot continue
     //
-    let url = format!("https://{}/root.crt", server);
+    let url = format!("https://{}/", server);
     let mut handle = Easy::new();
-    handle.ssl_verify_host(true).unwrap();
-    handle.ssl_verify_peer(true).unwrap();
-    handle
-        .ssl_min_max_version(
-            curl::easy::SslVersion::Tlsv11,
-            curl::easy::SslVersion::Tlsv13,
-        )
-        .unwrap();
-    handle.url(&url).unwrap();
+    handle.ssl_verify_host(true)?;
+    handle.ssl_verify_peer(true)?;
+    handle.ssl_min_max_version(
+        curl::easy::SslVersion::Tlsv11,
+        curl::easy::SslVersion::Tlsv13,
+    )?;
+    handle.url(&url)?;
     match handle.perform() {
         Ok(_) => {
             debug!("Got a handle on the first attempt.");
@@ -164,26 +163,26 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
     };
 
     // Force a re-connect on the next run
-    handle.fresh_connect(true).unwrap();
+    handle.fresh_connect(true)?;
 
     let ca_path = Path::new(&ca_cert);
 
     // Force a re-connect on the next run
-    handle.cainfo(ca_path).unwrap();
+    handle.cainfo(ca_path)?;
 
     match handle.perform() {
         Ok(_) => {
             debug!("Got a handle on second attempt");
-            return Ok(handle);
+            Ok(handle)
         }
         Err(e) => {
             error!(
                 "Failed to connect with {:?} as certificate. \n{}",
                 ca_cert, e
             );
+            Err(e)
         }
-    };
-    Err("Unable to get a connection".to_owned())
+    }
 }
 
 /// Get crt wraps all the logic that we might need to perform to get a certificate
@@ -193,7 +192,7 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
 /// 4. If we fail, POST the certificate to the server and try again
 /// 5. Depending on error codes, wait longer or not
 ///
-pub fn get_crt(server: &str, ca_cert: &str, csr_filename: &str) -> Result<String, String> {
+pub fn get_crt(server: &str, ca_cert: &str, _csr_filename: &str) -> Result<CertState, Error> {
     // Try GET on the url:
     //     if 200:  return
     //     if 202: Do nothing, we are waiting for the server to sign
@@ -202,7 +201,6 @@ pub fn get_crt(server: &str, ca_cert: &str, csr_filename: &str) -> Result<String
     //
     //     Other return codes? Treat as an error
     //
-    let handle = get_curl_handle(&server, &ca_cert)?;
-    post_csr(handle, &csr_filename).unwrap();
-    Err("get_crt is not implemented yet".to_owned())
+    let _handle = get_curl_handle(&server, &ca_cert)?;
+    panic!("get_crt is not implemented yet");
 }

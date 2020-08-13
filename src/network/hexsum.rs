@@ -4,6 +4,7 @@
 use sha2::{Digest, Sha256};
 
 /// Take a string buffer and calculate it's hex-ified sha256sum
+#[allow(dead_code)]
 pub fn sha256hex(indata: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(&indata);
