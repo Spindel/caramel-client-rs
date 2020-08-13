@@ -244,7 +244,7 @@ fn check_commoname_match(subject: &x509::X509NameRef, clientid: &str) -> Result<
     let entry = subject.entries_by_nid(Nid::COMMONNAME).next().unwrap();
     let raw_name = entry.data().as_utf8()?;
     let name = raw_name.to_string();
-    if clientid != &name {
+    if clientid != name {
         return Ok(false);
     }
     // MAX_CN_LENGTH is from the caramel server codebase as of 2020-07
