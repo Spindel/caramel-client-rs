@@ -4,7 +4,7 @@
 use sha2::{Digest, Sha256};
 
 /// Take a string buffer and calculate it's hex-ified sha256sum
-pub fn sha256hex(indata: &str) -> String {
+pub fn sha256hex(indata: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(&indata);
     let result = hasher.finalize();
@@ -35,7 +35,7 @@ TdnsVmkvlgUQop1CsdXfhcEtt5AzfuvgNBrpUPgRs6IVyHF6N9o90d/7YwLxlvEX
 kVDsWYTe/wk=
 -----END CERTIFICATE REQUEST-----
 ";
-        let out = sha256hex(&CSR_DATA.to_string());
+        let out = sha256hex(&CSR_DATA.as_bytes().to_vec());
         assert_eq!(
             out,
             "3f6edb2595850495f9f15214018aee629af959c68f72b331f15d40e8daaa81ed"

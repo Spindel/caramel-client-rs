@@ -5,7 +5,6 @@ mod hexsum;
 
 use curl::easy::Easy;
 use log::{debug, error, info};
-use std::fs::File;
 use std::path::Path;
 use thiserror::Error;
 
@@ -81,7 +80,6 @@ fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>
 }
 
 /// Fetch the root certificate if we do not have it already.
-/// Will fail violently if the file already exists
 /// Will fail if the server is not valid against our default CA-store
 ///
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
@@ -105,39 +103,11 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, Error> {
     }
 }
 
-/// Assuming that a certificate file does not exist on the server, post the file.
-/// Internal use, handle is an already initialized and configured curl handle with the correct
-/// logic for data
-#[allow(dead_code)]
-fn post_csr(_handle: curl::easy::Easy, csr_filename: &str) -> Result<(), String> {
-    use std::io::prelude::*;
-
-    let path = Path::new(&csr_filename);
-    let mut file = match File::open(&path) {
-        Err(e) => panic!("Unable to read: {}", e),
-        Ok(file) => file,
-    };
-    let mut data = String::new();
-
-    match file.read_to_string(&mut data) {
-        Err(e) => panic!("Humbug reading: {}", e),
-        _ => debug!("File read"),
-    };
-
-    let hexname = hexsum::sha256hex(&data);
-    let url = format!("https://foo/{}", hexname);
-    info!("About to post to: {}", url);
-    Err("humbug".to_owned())
-}
-
-/// 1. set up our default settings for curl connections
-/// 2. Try to connect using the default PKI info of the  server
-/// 2a. Return a handle if that works
-/// 3. If it failed, add the ca_cert to the cert store, and try again
-/// 3a. Return handle if that works
-/// 4. failure
+/// Creates a curl handle, attempting connections to the server using both public PKI keys and if
+/// that fails, the local  `ca_cert ` from the path.
+/// Returns either a handle, or the last connection error from curl
 ///
-fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, curl::Error> {
+fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
     // If that _fails_ because fex. SSL certificate failure, we add the ca_cert to the SSL
@@ -161,14 +131,9 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, curl
         }
         Err(e) => error!("Failed to connect with default TLS settings. \n{}", e),
     };
-
     // Force a re-connect on the next run
     handle.fresh_connect(true)?;
-
-    let ca_path = Path::new(&ca_cert);
-
-    // Force a re-connect on the next run
-    handle.cainfo(ca_path)?;
+    handle.cainfo(ca_cert)?;
 
     match handle.perform() {
         Ok(_) => {
@@ -185,14 +150,57 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, curl
     }
 }
 
-/// Get crt wraps all the logic that we might need to perform to get a certificate
+/// Internal function that downloads the certificate
+/// Using `handle`  and assumes that our setup is complete.
+///
+/// Result is the status code and a vector of data.
+///
+/// Errors:
+/// returns all curl errors
+///
+fn curl_get_crt(handle: &mut Easy, url: &str, content: &mut Vec<u8>) -> Result<u32, curl::Error> {
+    handle.url(&url)?;
+    handle.post(false)?;
+    // Start a new block scope here, that allows it to access our buffer `content` exclusive or
+    // not, and then we can once more use it after the block scope.
+    {
+        let mut transfer = handle.transfer();
+        transfer.write_function(|data| {
+            content.extend_from_slice(data);
+            Ok(data.len())
+        })?;
+        transfer.perform()?;
+    }
+    let status_code = handle.response_code()?;
+    debug!("GET {}, status={}", url, status_code);
+    Ok(status_code)
+}
+
+/// Internal function that downloads the certificate
+/// Using `handle` and assumes that our setup is complete.
+/// Mostly only does memory allocation and parsing of status code into results or error.
+///
+fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, Error> {
+    // Certificates are usually around 2100-2300 bytes
+    // A 4k allocation should be good for this.
+    let mut content = Vec::<u8>::with_capacity(4096);
+    let status_code = curl_get_crt(handle, url, &mut content)?;
+    match status_code {
+        200 => Ok(CertState::Downloaded(content)),
+        202 | 304 => Ok(CertState::Pending),
+        403 => Ok(CertState::Rejected),
+        404 => Err(Error::NotFound),
+        _ => Err(Error::Unknown),
+    }
+}
+
+/// Get crt _only_ attempts to fetch the certificate, and only attempts to do so once.
 /// 1. Get the required connection information (tls, curl handle, etc)
 /// 2. Calculate sha256sum of our csr to post to the server.
-/// 3. Attempt to download a fresh certificate and save it locally
-/// 4. If we fail, POST the certificate to the server and try again
-/// 5. Depending on error codes, wait longer or not
+/// 3. Attempt to download a fresh certificate and return it.
 ///
-pub fn get_crt(server: &str, ca_cert: &str, _csr_filename: &str) -> Result<CertState, Error> {
+#[allow(dead_code)]
+pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, Error> {
     // Try GET on the url:
     //     if 200:  return
     //     if 202: Do nothing, we are waiting for the server to sign
@@ -201,6 +209,9 @@ pub fn get_crt(server: &str, ca_cert: &str, _csr_filename: &str) -> Result<CertS
     //
     //     Other return codes? Treat as an error
     //
-    let _handle = get_curl_handle(&server, &ca_cert)?;
-    panic!("get_crt is not implemented yet");
+    let hexname = hexsum::sha256hex(csr_data);
+    let url = format!("https://{}/{}", server, hexname);
+    info!("Attempting to download certificate from: {}", url);
+    let mut handle = curl_get_handle(&server, &ca_cert)?;
+    inner_get_crt(&mut handle, &url)
 }

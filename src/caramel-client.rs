@@ -40,10 +40,15 @@ impl CertificateRequest {
                 "CA cert: '{}' does not exist, fetching.",
                 self.ca_cert_file_name
             );
+
             let ca_data = match network::fetch_root_cert(&self.server) {
                 Ok(data) => data,
                 Err(e) => return Err(format!("{}", e)),
             };
+            // Open the file for writing with "Create new" option, which causes a failure if this file
+            // already exists.
+            // We only perform this _after_ we have downloaded the certificate, to make sure we do not
+            // leave an empty file around.
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -107,6 +112,7 @@ impl CertificateRequest {
         let crt_path = Path::new(&self.crt_file_name);
         let key_path = Path::new(&self.key_file_name);
         let ca_cert_data = std::fs::read(&ca_path).unwrap();
+        let csr_path = Path::new(&self.csr_file_name);
         let key_data = std::fs::read(&key_path).unwrap();
 
         if crt_path.exists() {
@@ -116,8 +122,9 @@ impl CertificateRequest {
                 Err(e) => error!("Invalid / error parsing: {}", e),
             };
         }
+        let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res = network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name);
+        let res = network::get_crt(&self.server, &ca_path, &csr_data);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, Pending signature"),
