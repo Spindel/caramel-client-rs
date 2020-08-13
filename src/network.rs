@@ -127,30 +127,9 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
     };
 
     // Force a re-connect on the next run
-    match handle.fresh_connect(true) {
-        Ok(_) => {
-            debug!("Got a fresh connect");
-        }
-        Err(e) => {
-            error!("Failed to perform a fresh connect. \n{}", e);
-        }
-    };
-
+    handle.fresh_connect(true).unwrap();
     let ca_path = Path::new(&ca_cert);
-
-    // Force a re-connect on the next run
-    match handle.cainfo(ca_path) {
-        Ok(_) => {
-            debug!("Got a re-connect with certificate {:?}", ca_cert);
-            return Ok(handle);
-        }
-        Err(e) => {
-            error!(
-                "Failed to perform a re-connect with certificate {}. \n{}",
-                ca_cert, e
-            );
-        }
-    };
+    handle.cainfo(ca_path).unwrap();
 
     match handle.perform() {
         Ok(_) => {
@@ -158,10 +137,7 @@ fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, Stri
             return Ok(handle);
         }
         Err(e) => {
-            error!(
-                "Failed to connect with {:?} as certificate. \n{}",
-                ca_cert, e
-            );
+            error!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
         }
     };
     Err("Unable to get a connection".to_owned())
