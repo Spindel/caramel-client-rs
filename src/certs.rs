@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright 2020 Modio AB
+
 use log::{debug, error, info};
 use openssl::error::ErrorStack;
 use openssl::pkey::PKey;

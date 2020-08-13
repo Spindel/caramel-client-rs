@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// Copyright 2020 Modio AB
+
 use caramel_client::certs;
 use caramel_client::network;
 use log::{debug, error, info};
