@@ -18,7 +18,7 @@ pub enum CertState {
 /// Will fail violently if the file already exists
 /// Will fail if the server is not valid against our default CA-store
 ///
-pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
+pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, String> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
     // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) cert for this
@@ -71,7 +71,7 @@ pub fn fetch_root_cert(server: &String) -> Result<Vec<u8>, String> {
 /// Assuming that a certificate file does not exist on the server, post the file.
 /// Internal use, handle is an already initialized and configured curl handle with the correct
 /// logic for data
-fn post_csr(_handle: curl::easy::Easy, csr_filename: &String) -> Result<(), String> {
+fn post_csr(_handle: curl::easy::Easy, csr_filename: &str) -> Result<(), String> {
     use std::io::prelude::*;
 
     let path = Path::new(&csr_filename);
@@ -99,7 +99,7 @@ fn post_csr(_handle: curl::easy::Easy, csr_filename: &String) -> Result<(), Stri
 /// 3a. Return handle if that works
 /// 4. failure
 ///
-fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy, String> {
+fn get_curl_handle(server: &str, ca_cert: &str) -> Result<curl::easy::Easy, String> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
     // If that _fails_ because fex. SSL certificate failure, we add the ca_cert to the SSL
@@ -127,30 +127,9 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
     };
 
     // Force a re-connect on the next run
-    match handle.fresh_connect(true) {
-        Ok(_) => {
-            debug!("Got a fresh connect");
-        }
-        Err(e) => {
-            error!("Failed to perform a fresh connect. \n{}", e);
-        }
-    };
-
+    handle.fresh_connect(true).unwrap();
     let ca_path = Path::new(&ca_cert);
-
-    // Force a re-connect on the next run
-    match handle.cainfo(ca_path) {
-        Ok(_) => {
-            debug!("Got a re-connect with certificate {:?}", ca_cert);
-            return Ok(handle);
-        }
-        Err(e) => {
-            error!(
-                "Failed to perform a re-connect with certificate {}. \n{}",
-                ca_cert, e
-            );
-        }
-    };
+    handle.cainfo(ca_path).unwrap();
 
     match handle.perform() {
         Ok(_) => {
@@ -158,10 +137,7 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
             return Ok(handle);
         }
         Err(e) => {
-            error!(
-                "Failed to connect with {:?} as certificate. \n{}",
-                ca_cert, e
-            );
+            error!("Failed to connect with {} as certificate. \n{}", ca_cert, e);
         }
     };
     Err("Unable to get a connection".to_owned())
@@ -174,7 +150,7 @@ fn get_curl_handle(server: &String, ca_cert: &String) -> Result<curl::easy::Easy
 /// 4. If we fail, POST the certificate to the server and try again
 /// 5. Depending on error codes, wait longer or not
 ///
-pub fn get_crt(server: &String, ca_cert: &String, csr_filename: &String) -> Result<String, String> {
+pub fn get_crt(server: &str, ca_cert: &str, csr_filename: &str) -> Result<String, String> {
     // Try GET on the url:
     //     if 200:  return
     //     if 202: Do nothing, we are waiting for the server to sign
@@ -184,6 +160,6 @@ pub fn get_crt(server: &String, ca_cert: &String, csr_filename: &String) -> Resu
     //     Other return codes? Treat as an error
     //
     let handle = get_curl_handle(&server, &ca_cert)?;
-    post_csr(handle, &csr_filename).unwrap();
+    post_csr(handle, csr_filename).unwrap();
     Err("get_crt is not implemented yet".to_owned())
 }

@@ -4,7 +4,6 @@
 use caramel_client::certs;
 use caramel_client::network;
 use log::{debug, error, info};
-use simple_logger;
 use std::path::Path;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
@@ -19,10 +18,10 @@ struct CertificateRequest {
 }
 
 impl CertificateRequest {
-    pub fn new(server: String, client_id: String) -> CertificateRequest {
+    pub fn new(server: &str, client_id: &str) -> CertificateRequest {
         CertificateRequest {
-            server: format!("{}", &server),
-            client_id: format!("{}", &client_id),
+            server: server.to_string(),
+            client_id: client_id.to_string(),
             key_file_name: format!("{}{}", &client_id, ".key"),
             csr_file_name: format!("{}{}", &client_id, ".csr"),
             crt_temp_file_name: format!("{}{}", &client_id, ".temp"),
@@ -119,17 +118,16 @@ impl CertificateRequest {
 
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
-            let _valid =
-                match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
-                    Ok(_) => debug!("Valid cert"),
-                    Err(e) => error!("Invalid / error parsing: {}", e),
-                };
+            match certs::verify_cert(&cert_data, &ca_cert_data, &key_data, &self.client_id) {
+                Ok(_) => debug!("Valid cert"),
+                Err(e) => error!("Invalid / error parsing: {}", e),
+            };
         }
 
         let temp_crt =
             network::get_crt(&self.server, &self.ca_cert_file_name, &self.csr_file_name)?;
 
-        let _valid = match certs::verify_cert(
+        match certs::verify_cert(
             &temp_crt.into_bytes(),
             &ca_cert_data,
             &key_data,
@@ -149,13 +147,13 @@ impl CertificateRequest {
 }
 
 fn certificate_request(
-    server: String,
-    client_id: String,
+    server: &str,
+    client_id: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!("Server: {} client_id: {}", server, client_id);
 
     // Create request info
-    let request_info = CertificateRequest::new(server, client_id);
+    let request_info = CertificateRequest::new(&server, &client_id);
 
     request_info.ensure_key()?;
     request_info.ensure_cacert()?;
@@ -164,7 +162,7 @@ fn certificate_request(
     Ok("Received Certificate".into())
 }
 
-/// Parse the commandline, returning server and client_id
+/// Parse the commandline, returning `server` and `client_id`
 /// Alternatively, an error message in an Err
 ///
 fn read_cmd_input() -> Result<(String, String), String> {
@@ -173,25 +171,21 @@ fn read_cmd_input() -> Result<(String, String), String> {
     debug!("{:?}", args); // DEBUG PRINT
 
     let length = args.len();
-    match length {
-        3 => {
-            let client_id = args.pop().unwrap();
-            let server = args.pop().unwrap();
-            Ok((server, client_id))
-        }
-
-        _ => {
-            let program = args.first().unwrap();
-            let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
-            Err(err_msg)
-        }
+    if length == 3 {
+        let client_id = args.pop().unwrap();
+        let server = args.pop().unwrap();
+        Ok((server, client_id))
+    } else {
+        let program = args.first().unwrap();
+        let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
+        Err(err_msg)
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_level(log::Level::Debug).unwrap();
     let (server, client_id) = read_cmd_input()?;
-    let res = certificate_request(server, client_id);
+    let res = certificate_request(&server, &client_id);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());
