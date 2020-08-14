@@ -36,6 +36,11 @@ pub enum CertState {
     Downloaded(Vec<u8>),
 }
 
+struct CurlReply {
+    status_code: u32,
+    data: Vec<u8>,
+}
+
 /// Inner function that uses the curl api enr errors for `fetch_root_cert`
 /// `url` is a complete url
 /// `content` is where the resulting data will be saved
@@ -43,7 +48,7 @@ pub enum CertState {
 ///
 /// Errors:
 /// passes all curl errors through.
-fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>), curl::Error> {
+fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl::Error> {
     let mut handle = Easy::new();
     handle.url(&url)?;
     handle.ssl_verify_host(true)?;
@@ -61,18 +66,23 @@ fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>
     // At least that's how I'm sort of currently understanding how this works.
     {
         let mut transfer = handle.transfer();
-        transfer.write_function(|data| {
-            content.extend_from_slice(data);
-            Ok(data.len())
+        transfer.write_function(|from_server| {
+            data.extend_from_slice(from_server);
+            Ok(from_server.len())
         })?;
         transfer.perform()?;
     }
     let status_code = handle.response_code()?;
-    Ok((status_code, content))
+    Ok(CurlReply { status_code, data })
 }
 
 /// Fetch the root certificate if we do not have it already.
 /// Will fail if the server is not valid against our default CA-store
+/// # Errors
+///    `CcError::Network` for most HTTP status-codes that we do not know what to do with
+///    `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
+///    `CcError::CANotFound` Means that this server has no CA file.
+///                        It's probably not running caramel.
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
@@ -86,9 +96,9 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     // A 4k allocation should be good for this
     let content = Vec::<u8>::with_capacity(4096);
 
-    let (status_code, content) = curl_fetch_root_cert(&url, content)?;
-    match status_code {
-        200 => Ok(content),
+    let res = curl_fetch_root_cert(&url, content)?;
+    match res.status_code {
+        200 => Ok(res.data),
         404 => Err(CcError::CaNotFound),
         _ => Err(CcError::Network),
     }
@@ -114,26 +124,25 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
         curl::easy::SslVersion::Tlsv13,
     )?;
     handle.url(&url)?;
+    info!("Probing: '{}' using default TLS settings", &server);
     match handle.perform() {
-        Ok(_) => {
-            debug!("Got a handle on the first attempt.");
-            return Ok(handle);
-        }
-        Err(e) => error!("Failed to connect with default TLS settings. \n{}", e),
+        Ok(_) => return Ok(handle),
+        Err(e) => info!("Failed to connect with default TLS settings. \n{}", e),
     };
     // Force a re-connect on the next run
     handle.fresh_connect(true)?;
     handle.cainfo(ca_cert)?;
 
+    debug!(
+        "Probing '{}' using {:?} as CA certificate",
+        &server, ca_cert
+    );
     match handle.perform() {
-        Ok(_) => {
-            debug!("Got a handle on second attempt");
-            Ok(handle)
-        }
+        Ok(_) => Ok(handle),
         Err(e) => {
             error!(
-                "Failed to connect with {:?} as CA certificate. \n{}",
-                ca_cert, e
+                "Failed to connect to '{}' with {:?} as CA certificate. \n{}",
+                &server, ca_cert, e
             );
             Err(e)
         }
@@ -147,38 +156,50 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
 ///
 /// Errors:
 /// returns all curl errors
-fn curl_get_crt(handle: &mut Easy, url: &str, content: &mut Vec<u8>) -> Result<u32, curl::Error> {
+fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> {
+    // Certificates are usually around 2100-2300 bytes
+    // A 4k allocation should be good for this.
+    let mut data = Vec::<u8>::with_capacity(4096);
+
     handle.url(&url)?;
     handle.post(false)?;
     // Start a new block scope here, that allows it to access our buffer `content` exclusive or
     // not, and then we can once more use it after the block scope.
     {
         let mut transfer = handle.transfer();
-        transfer.write_function(|data| {
-            content.extend_from_slice(data);
+        transfer.write_function(|from_server| {
+            data.extend_from_slice(from_server);
             Ok(data.len())
         })?;
+
         transfer.perform()?;
     }
     let status_code = handle.response_code()?;
     debug!("GET {}, status={}", url, status_code);
-    Ok(status_code)
+    Ok(CurlReply { status_code, data })
 }
 
-/// Internal function that downloads the certificate
-/// Using `handle` and assumes that our setup is complete.
-/// Mostly only does memory allocation and parsing of status code into results or error.
-fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CcError> {
-    // Certificates are usually around 2100-2300 bytes
-    // A 4k allocation should be good for this.
-    let mut content = Vec::<u8>::with_capacity(4096);
-    let status_code = curl_get_crt(handle, url, &mut content)?;
-    match status_code {
-        200 => Ok(CertState::Downloaded(content)),
+/// Internal function that is responsible for consuming `CurlReply` (Status code and data) into
+/// useful error statuses, log lines and other data we may require.
+fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
+    match res.status_code {
+        200 => Ok(CertState::Downloaded(res.data)),
         202 | 304 => Ok(CertState::Pending),
-        403 => Ok(CertState::Rejected),
         404 => Ok(CertState::NotFound),
-        _ => Err(CcError::Network),
+        403 => {
+            info!(
+                "Rejected CSR from server when fetching '{}': \n {:?}",
+                url, res.data
+            );
+            Ok(CertState::Rejected)
+        }
+        _ => {
+            error!(
+                "Error from server when fetching '{}': \n {:?}",
+                url, res.data
+            );
+            Err(CcError::Network)
+        }
     }
 }
 
@@ -186,13 +207,24 @@ fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CcError> {
 /// 1. Get the required connection information (tls, curl handle, etc)
 /// 2. Calculate sha256sum of our csr to post to the server.
 /// 3. Attempt to download a fresh certificate and return it.
+/// # Ok
+///    `CertState::NotFound`   Means that you need to POST this CSR first.
+///    `CertState::Downloaded`  Contains the fresh certificate
+///    `CertState::Pending`     Means we need to wait for unknown time for the server to sign our CSR
+///    `CertState::Rejected`     The server has rejected our CSR, and we may need to re-generate both our Key and CSR.
+///
+/// # Errors
+///    `CcError::Network` for most HTTP status-codes that we do not know what to do with
+///    `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
+///
 #[allow(dead_code)]
 pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
     info!("Attempting to download certificate from: {}", url);
     let mut handle = curl_get_handle(&server, &ca_cert)?;
-    inner_get_crt(&mut handle, &url)
+    let get_res = curl_get_crt(&mut handle, &url)?;
+    inner_get_crt(&url, get_res)
 }
 
 /// Internal function that posts a CSR to the url
@@ -201,42 +233,84 @@ pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertStat
 ///
 /// Errors:
 /// returns all curl errors
-fn curl_post_csr(handle: &mut Easy, url: &str, mut csr_data: &[u8]) -> Result<u32, curl::Error> {
+fn curl_post_csr(
+    handle: &mut Easy,
+    url: &str,
+    mut csr_data: &[u8],
+) -> Result<CurlReply, curl::Error> {
     use std::io::Read;
     handle.url(&url)?;
     handle.post(true)?;
     handle.post_field_size(csr_data.len() as u64)?;
+
+    let mut data = Vec::new();
     // Start a scope here. Since the `transfer` is created inside this scope, and then transfer
     // gets the closure which posts the data, and after this block, `transfer` is no more.
     // For the compiler, that means that `csr_data` is no longer accessed outside this block, and
     // the lifetime is thus managed.
     {
         let mut transfer = handle.transfer();
-        transfer.read_function(|into| {
+        transfer.read_function(|to_server| {
             // "as_slice" means that we can use the Reader protocol on a vector
             // https://doc.rust-lang.org/std/io/trait.Read.html
-            let len = csr_data.read(into).unwrap_or(0);
+            let len = csr_data.read(to_server).unwrap_or(0);
             Ok(len)
         })?;
+
+        transfer.write_function(|from_server| {
+            data.extend_from_slice(from_server);
+            Ok(data.len())
+        })?;
+
         transfer.perform()?;
     }
     let status_code = handle.response_code()?;
     debug!("POST {}, status={}", url, status_code);
-    Ok(status_code)
+    Ok(CurlReply { status_code, data })
 }
 
-/// Internal function to post a CSR to the server, using an already configured `handle`
-/// Mainly exists to parse the resulting status code into a proper state and error handoff.
-fn inner_post_csr(handle: &mut Easy, url: &str, csr_data: &[u8]) -> Result<CertState, CcError> {
-    let status_code = curl_post_csr(handle, url, csr_data)?;
-    match status_code {
+/// Internal function to handle replies from a curl POST CSR transaction.
+/// It is responsible for decoding status codes and messages into useful Error and Result states.
+///
+/// # Errors
+/// `CcError::NetworkPost`  - Error during Post, with reason
+/// `CcError::Network`      - Unknown Network Error
+fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
+    // The server will return HTTP Bad Request in the following _known_ situations:
+    // 1. POST of CSR to an URL that does not match the CSR.
+    //    Ie, if the sha256 and the data do not match.
+    // 2. Subject of CSR does not match Subject of the Server's CA
+    //     (Posting a CSR to a different server)
+    // 3. Posting the same CSR twice.
+    // However, other than looking at the string output in the error message,
+    // there is no way for us to know which of those errors we got.
+    //
+    // Other errors:
+    // 1. Posting a too large file  => HTTP 413, RequestEntityTooLarge
+    // 2. Posting without passing a Content-Length header, => HTTP 411, Length Required
+    //
+    match res.status_code {
         200 | 202 => Ok(CertState::Pending),
-        _ => Err(CcError::Network),
+        400 | 411 | 413 => {
+            error!("Error during POST of CSR to '{}': \n{:?}", url, res.data);
+            // from_utf8_lossy converts bytes and replaces unknown data with "safe" utf8 code.
+            // It is slow and may cause copies, but we aren't doing that very often.
+            let msg = String::from_utf8_lossy(&res.data).to_string();
+            Err(CcError::NetworkPost(msg))
+        }
+        _ => {
+            error!("Unknown error POST of CSR to '{}': \n{:?}", url, res.data);
+            Err(CcError::Network)
+        }
     }
 }
 
 /// Assuming that a certificate file does not exist on the `server`, post `csr_data` to a name
 /// calculated by the contents of `csr_data`
+///
+/// # Errors
+///   `CcError::LibCurl` for various curl internal errors ( dns, timeout, typoed hostname, etc)
+///   `CcError::Network` for various status codes from the CA server.
 #[allow(dead_code)]
 pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
@@ -245,7 +319,8 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
     let mut handle = curl_get_handle(&server, &ca_cert)?;
 
     info!("About to post CSR to: {}", url);
-    inner_post_csr(&mut handle, &url, csr_data)
+    let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
+    inner_post_csr(&url, &post_res)
 }
 
 /// Calculate an exponential backoff.
@@ -275,6 +350,10 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
 /// 3. If POST was succesful, iterate loop times:
 /// 4   Attempt to download and return the certificate
 /// 5. If all attempts fail (no signed certificate exists) error out
+///
+/// # Errors
+///   `CcError::LibCurl` for various curl internal errors ( dns, timeout, typoed hostname, etc)
+///   `CcError::Network` for various status codes from the CA server.
 pub fn post_and_get_crt(
     server: &str,
     ca_cert: &Path,
@@ -289,7 +368,8 @@ pub fn post_and_get_crt(
     let mut handle = curl_get_handle(&server, &ca_cert)?;
 
     for attempt in 0..loops {
-        match inner_get_crt(&mut handle, &url) {
+        let get_res = curl_get_crt(&mut handle, &url)?;
+        match inner_get_crt(&url, get_res) {
             // Pending, We sleep for a bit and try again
             Ok(CertState::Pending) => {
                 let delay = calculate_backoff(attempt);
@@ -299,7 +379,8 @@ pub fn post_and_get_crt(
             // Cert not found? Attempt to upload it.
             Ok(CertState::NotFound) => {
                 info!("CSR not found on server, posting.");
-                let _discard_post_status = inner_post_csr(&mut handle, &url, csr_data)?;
+                let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
+                let _discard_post_status = inner_post_csr(&url, &post_res)?;
             }
             // all other Ok states ( Rejected, Downloaded, etc..  are passed out of this function
             Ok(c) => return Ok(c),
@@ -311,7 +392,7 @@ pub fn post_and_get_crt(
 
 #[cfg(test)]
 mod tests {
-    use super::calculate_backoff;
+    use super::*;
     use std::time::Duration;
 
     #[test]
@@ -338,5 +419,124 @@ mod tests {
         assert!(bignum < BIG_DUR);
         assert!(bignum > SMALL_DUR);
         assert!(bignum >= thousand);
+    }
+
+    fn make_reply(status_code: u32, msg: &str) -> CurlReply {
+        let data = msg.as_bytes().to_vec();
+        CurlReply { status_code, data }
+    }
+
+    #[test]
+    fn test_post_csr_200_ok() {
+        let reply = make_reply(200, "");
+
+        let res = inner_post_csr("", &reply);
+        if let Ok(CertState::Pending) = res {
+            assert!(true);
+        } else {
+            assert!(false);
+        }
+    }
+    #[test]
+    fn test_post_csr_202_not_modified() {
+        let reply = make_reply(202, "");
+
+        let res = inner_post_csr("", &reply);
+        if let Ok(CertState::Pending) = res {
+            assert!(true);
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn test_post_csr_error_missing_header() {
+        let reply = make_reply(411, "Length required");
+        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
+        } else {
+            assert!(false, "We should get a Post error");
+        }
+    }
+
+    #[test]
+    fn test_post_csr_error_too_large() {
+        let reply = make_reply(413, "Too large 100kb > 12kb");
+
+        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
+        } else {
+            assert!(false, "We should get a Post error");
+        }
+    }
+
+    #[test]
+    fn test_post_csr_error() {
+        let err_msg = r#"{"status":400,"title":"Bad Request","detail":"Bad subject: (('ST', '\u00d6sterg\u00f6tland'),) do not match (('O', 'ModioAB'),)"}"#;
+        let reply = make_reply(400, err_msg);
+        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
+            assert!(true);
+        } else {
+            assert!(false, "We should get a Post error");
+        }
+    }
+
+    #[test]
+    fn test_post_csr_unknown() {
+        let reply = make_reply(500, "Cannot connect to database");
+
+        if let Err(CcError::Network) = inner_post_csr("", &reply) {
+            assert!(true);
+        } else {
+            assert!(false, "We should get a Post error");
+        }
+    }
+
+    #[test]
+    fn test_get_crt_ok() {
+        let reply = make_reply(200, "");
+
+        if let Ok(CertState::Downloaded(_)) = inner_get_crt("", reply) {
+            assert!(true);
+        } else {
+            assert!(false, "We should have a a data reploy");
+        }
+    }
+
+    #[test]
+    fn test_get_crt_pending() {
+        let reply = make_reply(202, "XXXXXXXXXXX");
+        if let Ok(CertState::Pending) = inner_get_crt("", reply) {
+            assert!(true);
+        } else {
+            assert!(false, "Should get an OK / Pending on 202");
+        }
+    }
+    #[test]
+    fn test_get_crt_rejected() {
+        let reply = make_reply(403, "Forbidden");
+        if let Ok(CertState::Rejected) = inner_get_crt("", reply) {
+            assert!(true);
+        } else {
+            assert!(false, "Should get an OK / Rejected on status 403");
+        }
+    }
+
+    #[test]
+    fn test_get_crt_not_posted() {
+        let reply = make_reply(404, "Not found");
+        if let Ok(CertState::NotFound) = inner_get_crt("", reply) {
+            assert!(true);
+        } else {
+            assert!(false, "Should get an OK + NotFound on 404");
+        }
+    }
+    #[test]
+    fn test_get_crt_error() {
+        let reply = make_reply(500, "Cannot connect to database");
+
+        if let Err(CcError::Network) = inner_get_crt("", reply) {
+            assert!(true);
+        } else {
+            assert!(false, "We should get a misc error");
+        }
     }
 }

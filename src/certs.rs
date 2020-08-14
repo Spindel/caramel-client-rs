@@ -118,10 +118,10 @@ fn workaround_subject() -> (X509Name, X509Name) {
         .append_entry_by_nid(Nid::LOCALITYNAME, "Linköping")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
+        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
+        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
         .unwrap();
     after
         .append_entry_by_nid(Nid::COMMONNAME, "Caramel Signing Certificate")
