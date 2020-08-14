@@ -32,6 +32,7 @@ impl From<curl::Error> for CaramelClientLibError {
 pub enum CertState {
     Pending,
     Rejected,
+    NotFound,
     Downloaded(Vec<u8>),
 }
 
@@ -88,7 +89,7 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CaramelClientLibError> {
     let (status_code, content) = curl_fetch_root_cert(&url, content)?;
     match status_code {
         200 => Ok(content),
-        404 => Err(CaramelClientLibError::NotFound),
+        404 => Err(CaramelClientLibError::CaNotFound),
         _ => Err(CaramelClientLibError::Network),
     }
 }
@@ -176,7 +177,7 @@ fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CaramelClien
         200 => Ok(CertState::Downloaded(content)),
         202 | 304 => Ok(CertState::Pending),
         403 => Ok(CertState::Rejected),
-        404 => Err(CaramelClientLibError::NotFound),
+        404 => Ok(CertState::NotFound),
         _ => Err(CaramelClientLibError::Network),
     }
 }
@@ -307,13 +308,13 @@ pub fn post_and_get_crt(
                 debug!("Sleeping for: {:?}", delay);
                 sleep(delay);
             }
-            // all other Ok states ( Rejected, Downloaded, etc..  are passed through
-            Ok(c) => return Ok(c),
             // Cert not found? Attempt to upload it.
-            Err(CaramelClientLibError::NotFound) => {
+            Ok(CertState::NotFound) => {
                 info!("CSR not found on server, posting.");
                 let _discard_post_status = inner_post_csr(&mut handle, &url, csr_data)?;
             }
+            // all other Ok states ( Rejected, Downloaded, etc..  are passed out of this function
+            Ok(c) => return Ok(c),
             Err(e) => return Err(e),
         }
     }

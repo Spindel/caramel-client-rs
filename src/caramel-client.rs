@@ -3,7 +3,6 @@
 
 use caramel_client::certs;
 use caramel_client::network;
-use caramel_client::CaramelClientLibError;
 use log::{debug, error, info};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -124,7 +123,9 @@ impl CertificateRequest {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, Pending signature"),
             Ok(network::CertState::Rejected) => panic!("Not implemented, delete rejected crt/key"),
-            Err(CaramelClientLibError::NotFound) => panic!("Not found is not supposed to happen"),
+            Ok(network::CertState::NotFound) => panic!(
+                "Not found is not supposed to happen. Has it really been POST-ed and accepted?"
+            ),
             Err(e) => panic!("Unknown error. cannot cope: {}", e),
         };
 

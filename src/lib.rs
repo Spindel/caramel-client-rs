@@ -42,4 +42,7 @@ pub enum CaramelClientLibError {
 
     #[error("The certificate was not found.")]
     NotFound,
+
+    #[error("The CA certificate was not found.")]
+    CaNotFound,
 }
