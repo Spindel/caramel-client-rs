@@ -3,7 +3,7 @@
 
 use sha2::{Digest, Sha256};
 
-/// Take a string buffer and calculate it's hex-ified sha256sum
+/// Take a u8 slice and calculate it's hex-ified sha256sum
 pub fn sha256hex(indata: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(&indata);
