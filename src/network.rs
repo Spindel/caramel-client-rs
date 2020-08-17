@@ -540,3 +540,70 @@ mod tests {
         }
     }
 }
+
+/// Tests that run against "live" data. These tests may randomly fail due to network services being
+/// down.
+#[cfg(test)]
+mod integration {
+    use super::*;
+    #[test]
+    fn get_cacert_from_log_ca() {
+        // ca.log.modio.se runs on a publicly signed PKI
+        let res = fetch_root_cert("ca.log.modio.se");
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn get_cacert_from_ca_modio() {
+        // ca.modio.se runs on a self-signed PKI
+        let res = fetch_root_cert("ca.modio.se");
+        match res {
+            Ok(_) => assert!(false, "Should not succeed due to being signed by others"),
+            Err(CcError::CaNotFound) => assert!(false, "Should not get 404 from this server."),
+            Err(_) => assert!(true, "Correct, should be a TLS connection error."),
+        }
+    }
+
+    #[test]
+    fn get_cacert_from_www_modio() {
+        // www.modio.se does not run a caramel server.
+        let res = fetch_root_cert("www.modio.se");
+        match res {
+            Err(CcError::CaNotFound) => assert!(true, "Should 404 from a web server"),
+            _ => assert!(false, "Wrong return from www.modio.se"),
+        }
+    }
+
+    #[test]
+    fn get_crt_from_ca_modio() {
+        // This is a well-known test-certificate CSR that is valid for 'ca.modio.se'
+        // It is expected to be able to download this.
+        let fffbeec0ffee_csr: &str = "-----BEGIN CERTIFICATE REQUEST-----
+MIICvDCCAaQCAQAwdzELMAkGA1UEBhMCU0UxFzAVBgNVBAgMDsOWc3RlcmfDtnRs
+YW5kMRMwEQYDVQQHDApMaW5rw7ZwaW5nMREwDwYDVQQKDAhNb2RpbyBBQjEQMA4G
+A1UECwwHQ2FyYW1lbDEVMBMGA1UEAwwMZmZmYmVlYzBmZmVlMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx0XvZX2qZn0oijLw2YptgP2dgPOXiV74LWYT
+4LLtQwTzgLE+3sHt9Hrk/nBtZtTTYqDGpKdOEEbnx/SV5E4QiGiAPR03LUKVprhD
+v3/uCz7GnzJLjBT6H5JaV0xi7zMYOdSqkJfi2nG0cShqD7PkXym1WODDPfRjAZ1c
+g1pjeGH0dfGuKe7bQlO2i9gsC/x1J7nWDdS/E8kffkDWamsWzb/a2iuHALp3IKnJ
+xc+IxmhdTCGzAqTEcasYERpUSPjTZ5O0ky0rIqS/97pT8TZjJ4jFLd7OEXv6hXK+
+2TOhZEGbmXLlOiXqRzVN+AoRPcBwLNE5MdVOxuoO+20jBMSgnQIDAQABoAAwDQYJ
+KoZIhvcNAQELBQADggEBAC+KY6lE8+cLTfKj9260om7atPcS8qQiywOeWNzyhp9F
+Ov7vWNCoh89vCiD4VWPRj7fPGiyB4oIY3M+cXUD3zW8Gi3IbwdnUoyrN9MzGALzQ
+6zBLcxUIEt6TgQLbLNBCjqNEy4gV9qmn/XmN+J8r0orRt66S9rxYjxhIKLkuQ9xa
+LixKAxaIJ58bLH0W3/+dBDTeugt2zR+bJrJXbf6n4A+wFqJnhn8uGH2dkRxhxGK8
+L4CRL0Y1CrLO2Rl/ukqN9Fvdpy3RVrjQQ4jERVzc8n+QaKtrPcJsVX9wP0IYLqPO
+aq69O+gq+AO+jX+8xQHnSIp6pxocIxaufeSaXCgVysM=
+-----END CERTIFICATE REQUEST-----
+";
+        let res = get_crt(
+            "ca.modio.se",
+            Path::new("certs/ca.modio.se.cacert"),
+            fffbeec0ffee_csr.as_bytes(),
+        );
+        match res {
+            Ok(CertState::Downloaded(_)) => assert!(true, "Is a valid csr, should have valid crt"),
+            _ => assert!(false, "Failure for unknown reason"),
+        }
+    }
+}
