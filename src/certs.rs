@@ -118,10 +118,10 @@ fn workaround_subject() -> (X509Name, X509Name) {
         .append_entry_by_nid(Nid::LOCALITYNAME, "Linköping")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
+        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
+        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
         .unwrap();
     after
         .append_entry_by_nid(Nid::COMMONNAME, "Caramel Signing Certificate")
@@ -445,10 +445,9 @@ pub fn create_csr(
 mod tests {
     use super::*;
     use crate::certs::blobs::testdata::{
-        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CRT_DATA1,
-        _VALID_CACERT_DATA1, _WORKAROUND_CACERT,
+        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CACERT_DATA1,
+        VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
     };
-
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
@@ -468,14 +467,14 @@ mod tests {
 
     #[test_env_log::test]
     fn test_accept_valid_cacert() {
-        let valid_cacert = convert_string_to_vec8(_VALID_CACERT_DATA1);
+        let valid_cacert = convert_string_to_vec8(VALID_CACERT_DATA1);
         let result = verify_cacert(&valid_cacert);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_accept_valid_workaround_cacert() {
-        let valid_cacert = convert_string_to_vec8(_WORKAROUND_CACERT);
+        let valid_cacert = convert_string_to_vec8(WORKAROUND_CACERT);
         let result = verify_cacert(&valid_cacert);
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -495,5 +494,63 @@ mod tests {
         let result = verify_cacert(&random_data);
         assert!(result.is_err());
         assert_eq!(Some(CaCertParseFailure), result.err());
+    }
+
+    #[test]
+    fn test_verify_csr_happy() {
+        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+
+        let result = verify_csr(&csr, &key, &client_id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_verify_csr_failure() {
+        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+        let key = create_private_key().unwrap();
+        let result = verify_csr(&csr, &key, &client_id);
+
+        match result {
+            Err(CcError::CsrSignedWithWrongKey) => assert!(true),
+            Ok(_) => assert!(false, "Should not be ok with different key"),
+            Err(_) => assert!(false, "Should not generate different errors"),
+        }
+    }
+
+    /// Normal functionality, subject passed through and CSR generated
+    #[test]
+    fn test_making_csr_no_override() {
+        let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let ca_sommar_modio_se = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let expected = convert_string_to_vec8(VALID_CSR_DATA1);
+
+        let result = create_csr(
+            &ca_sommar_modio_se,
+            &valid_key,
+            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
+        );
+        assert!(result.is_ok());
+        let csr = result.unwrap();
+        assert_eq!(csr, expected);
+    }
+
+    #[test]
+    /// Override functionality, should fail
+    fn test_making_csr_with_override() {
+        let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let ca_modio_se = convert_string_to_vec8(WORKAROUND_CACERT);
+
+        let result = create_csr(
+            &ca_modio_se,
+            &valid_key,
+            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
+        );
+        assert!(result.is_ok());
+        let csr = result.unwrap();
+        let csr_text = std::str::from_utf8(&csr).unwrap();
+        assert_eq!(csr_text, WORKAROUND_CSR_DATA1);
     }
 }
