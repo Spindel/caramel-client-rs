@@ -33,4 +33,16 @@ pub enum CaramelClientLibError {
 
     #[error("Unknown caramel client library error")]
     UnknownCaramelClientError,
+
+    #[error("Error from Libcurl during network operations")]
+    LibCurl,
+
+    #[error("Unknown error happened in transfer")]
+    Network,
+
+    #[error("The certificate was not found.")]
+    NotFound,
+
+    #[error("The CA certificate was not found.")]
+    CaNotFound,
 }
