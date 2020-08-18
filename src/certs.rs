@@ -38,7 +38,10 @@ pub fn verify_cacert(contents: &[u8]) -> Result<(), CcError> {
     match openssl_verify_cacert(contents) {
         Ok(true) => Ok(()),
         Ok(false) => Err(CaCertNotSelfSigned),
-        Err(_) => Err(CaCertParseFailure),
+        Err(e) => {
+            error!("openssl_verify_cacert failed, underlying error: {:?}", e);
+            Err(CaCertParseFailure)
+        }
     }
 }
 
@@ -432,11 +435,14 @@ pub fn create_csr(
     Ok(pemdata)
 }
 
+// To enable logging for one testcase, change "#[test]" -> "#[test_env_log::test]",
+// when execute `cargo test -- --nocapture` or `cargo test --workspace --verbose -- --nocapture`
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::certs::blobs::testdata::{
-        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1,
+        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CRT_DATA1,
+        _VALID_CACERT_DATA1, _WORKAROUND_CACERT,
     };
 
     #[test]
@@ -454,5 +460,36 @@ mod tests {
         let result = verify_private_key(&key_with_random_data);
         assert!(result.is_err());
         assert_eq!(Some(PrivateKeyParseFailure), result.err());
+    }
+
+    #[test_env_log::test]
+    fn test_accept_valid_cacert() {
+        let valid_cacert = convert_string_to_vec8(_VALID_CACERT_DATA1);
+        let result = verify_cacert(&valid_cacert);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_accept_valid_workaround_cacert() {
+        let valid_cacert = convert_string_to_vec8(_WORKAROUND_CACERT);
+        let result = verify_cacert(&valid_cacert);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fail_on_signed_crtificate() {
+        let signed_cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let result = verify_cacert(&signed_cert);
+        assert!(result.is_err());
+        assert_eq!(Some(CaCertNotSelfSigned), result.err());
+    }
+
+    #[test]
+    fn test_fail_on_random_data_as_certificate() {
+        let random_data = convert_string_to_vec8(RANDOM_DATA_KEY_DATA1);
+        let result = verify_cacert(&random_data);
+        assert!(result.is_err());
+        assert_eq!(Some(CaCertParseFailure), result.err());
     }
 }
