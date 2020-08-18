@@ -7,9 +7,9 @@ use curl::easy::Easy;
 use log::{debug, error, info};
 use std::path::Path;
 
-use crate::CaramelClientLibError;
+use crate::CcError;
 
-impl From<curl::Error> for CaramelClientLibError {
+impl From<curl::Error> for CcError {
     fn from(error: curl::Error) -> Self {
         let desc = error.description();
         let code = error.code();
@@ -20,7 +20,7 @@ impl From<curl::Error> for CaramelClientLibError {
             desc,
             extra.unwrap_or("")
         );
-        CaramelClientLibError::LibCurl
+        CcError::LibCurl
     }
 }
 
@@ -73,7 +73,7 @@ fn curl_fetch_root_cert(url: &str, mut content: Vec<u8>) -> Result<(u32, Vec<u8>
 
 /// Fetch the root certificate if we do not have it already.
 /// Will fail if the server is not valid against our default CA-store
-pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CaramelClientLibError> {
+pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
     // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) cert for this
@@ -89,8 +89,8 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CaramelClientLibError> {
     let (status_code, content) = curl_fetch_root_cert(&url, content)?;
     match status_code {
         200 => Ok(content),
-        404 => Err(CaramelClientLibError::CaNotFound),
-        _ => Err(CaramelClientLibError::Network),
+        404 => Err(CcError::CaNotFound),
+        _ => Err(CcError::Network),
     }
 }
 
@@ -168,7 +168,7 @@ fn curl_get_crt(handle: &mut Easy, url: &str, content: &mut Vec<u8>) -> Result<u
 /// Internal function that downloads the certificate
 /// Using `handle` and assumes that our setup is complete.
 /// Mostly only does memory allocation and parsing of status code into results or error.
-fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CaramelClientLibError> {
+fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CcError> {
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this.
     let mut content = Vec::<u8>::with_capacity(4096);
@@ -178,7 +178,7 @@ fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CaramelClien
         202 | 304 => Ok(CertState::Pending),
         403 => Ok(CertState::Rejected),
         404 => Ok(CertState::NotFound),
-        _ => Err(CaramelClientLibError::Network),
+        _ => Err(CcError::Network),
     }
 }
 
@@ -187,11 +187,7 @@ fn inner_get_crt(handle: &mut Easy, url: &str) -> Result<CertState, CaramelClien
 /// 2. Calculate sha256sum of our csr to post to the server.
 /// 3. Attempt to download a fresh certificate and return it.
 #[allow(dead_code)]
-pub fn get_crt(
-    server: &str,
-    ca_cert: &Path,
-    csr_data: &[u8],
-) -> Result<CertState, CaramelClientLibError> {
+pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
     info!("Attempting to download certificate from: {}", url);
@@ -231,26 +227,18 @@ fn curl_post_csr(handle: &mut Easy, url: &str, mut csr_data: &[u8]) -> Result<u3
 
 /// Internal function to post a CSR to the server, using an already configured `handle`
 /// Mainly exists to parse the resulting status code into a proper state and error handoff.
-fn inner_post_csr(
-    handle: &mut Easy,
-    url: &str,
-    csr_data: &[u8],
-) -> Result<CertState, CaramelClientLibError> {
+fn inner_post_csr(handle: &mut Easy, url: &str, csr_data: &[u8]) -> Result<CertState, CcError> {
     let status_code = curl_post_csr(handle, url, csr_data)?;
     match status_code {
         200 | 202 => Ok(CertState::Pending),
-        _ => Err(CaramelClientLibError::Network),
+        _ => Err(CcError::Network),
     }
 }
 
 /// Assuming that a certificate file does not exist on the `server`, post `csr_data` to a name
 /// calculated by the contents of `csr_data`
 #[allow(dead_code)]
-pub fn post_csr(
-    server: &str,
-    ca_cert: &Path,
-    csr_data: &[u8],
-) -> Result<CertState, CaramelClientLibError> {
+pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
 
@@ -292,7 +280,7 @@ pub fn post_and_get_crt(
     ca_cert: &Path,
     csr_data: &[u8],
     loops: usize,
-) -> Result<CertState, CaramelClientLibError> {
+) -> Result<CertState, CcError> {
     use std::thread::sleep;
 
     let hexname = hexsum::sha256hex(csr_data);
