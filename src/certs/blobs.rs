@@ -48,7 +48,7 @@ Yegr7LgJOyQdp1MtVENfRFL5Ag==
 ";
 
     // 06bc4ab2-dbaf-11ea-9abc-00155dcdee8d.crt
-    pub const _VALID_CRT_DATA1: &str = "-----BEGIN CERTIFICATE-----
+    pub const VALID_CRT_DATA1: &str = "-----BEGIN CERTIFICATE-----
 MIIFWDCCA0CgAwIBAgIRALBtIYDbrxHqsV5+EcyPSKkwDQYJKoZIhvcNAQELBQAw
 VjELMAkGA1UEBhMCU0UxEDAOBgNVBAoMB01vZGlvQUIxDzANBgNVBAsMBlNvbW1h
 cjEkMCIGA1UEAwwbQ2FyYW1lbCBTaWduaW5nIENlcnRpZmljYXRlMB4XDTIwMDgx
@@ -149,6 +149,16 @@ tOVFaR32lruT32JO2kC//kE9dJLzi+aXPQJAXWjT43LMkFcgWgyOTleBcnX6IRa/
 Xeurmaizv1MiVcqHMhycch8UzonUG6OQipIMuBhnBVEA/x3TSHD07iW8v3GBsyYO
 A3+dHf8gqPy9yxuITQJAArl6cfAw5L5o1tGm9lz4OeVbiGY1purYTy7bMpqYDgYv
 wZxKcLyO4BjEsK7m7iVhhtBsHWp8/3+dSCb3eAIORw==
+-----END RSA PRIVATE KEY-----
+";
+
+    pub const RANDOM_DATA_KEY_DATA1: &str = "-----BEGIN RSA PRIVATE KEY-----
+Hemsöborna är en roman från 1887 av August Strindberg. Den utgavs ett år efter Tjänstekvinnans son.
+Strindberg gjorde även en dramaversion av berättelsen 1889.
+Romanen skrevs under Strindbergs vistelse i Schweiz och södra Tyskland.
+
+De inledande raderna är en så kallad in medias res-fras:
+*Han kom som ett yrväder en aprilafton och hade ett höganäskrus i en svångrem om halsen.*
 -----END RSA PRIVATE KEY-----
 ";
 }
