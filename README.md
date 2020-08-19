@@ -150,3 +150,25 @@ Status codes in use:
 Error handling:
 
 - Rejected: Wipe key, CSR and start over
+
+
+### Embedded library application
+
+On mobile devices (smartphones) the library is used in the background to
+facilitate API connectivity. The first time the application is started it
+generates a new UUID and Key, and posts that to a Caramel Server in the
+background.
+
+The caramel server is configured to automatically sign all previously unseen
+UUID-based requests, thus the client can almost instantly get a certificate.
+
+At this step, an anonymous user has a _distinct_ and trusted identity to the
+server, while still being able to be anonymous.
+
+If the service then requires it, a proper _user authentication_ step can
+happen, using fex. OAuth or email call-back to tie a user identity to this
+device's account.
+
+For thise use-case, it is important to never attempt to store a file directly
+to disk, and only return file-like objects that can be stored in system
+key-chains or per-application databases.
