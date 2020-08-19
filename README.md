@@ -101,3 +101,52 @@ As the servers have administrators watching over them, there is no need to
 automatically attempt to recover from error situations, and it's important to
 fail with a good error message for administrators to be able to track the
 status of the application.
+
+
+### Embedded client application
+
+On embedded firmware, we do not want to ship a large amount of public CA
+certificates, and want to protect us against MITM and other interesting
+problems, so we embed the CA certificate with the hardware.
+
+For this use-case, the client is called by other applications, thus signifying
+the status of the key with an return-code, and never blocking or looping.
+
+In these cases, there is no administrator to access or debug, thus the client
+needs to be able to automatically recover, usually by starting over "from
+scratch" in case of certain error-codes from the Caramel server.
+
+Here, the application uses a "well known" serial number from hardware, or
+the MAC address of the device, as their client-id.
+
+Unlike the command-line client above, the CA-certificate should be able to use
+one specified elsewhere, and the Private Key and Certificate are stored in a
+single well-known file with specific ownership and permissions.
+
+To avoid concurrent invocations causing trouble, the _key_ file is `flock`-ed
+(Exclusive, returning an unspecified error-code if another process is in
+progress) while it is working with Keys and/or CSR-requests, thus causing an
+error-code exit if the program is started concurrently, which it can be, as
+multiple different tools will each attempt to start the well-known "Make sure
+we have keys" application if a key does not exist.
+
+To facilitate debugging and monitoring, the Client ID is part of the user-agent
+in this mode of operation.
+
+And to further grant identification, if the client deems that it has a useable
+certificate, it defaults to passing a client certificate to the server.
+
+This client also compares the time-stamp of the server-side and our local
+certificate, and doesn't fetch the file new in case it hasn't been updated, in
+order to save bandwidth on metered connections.
+
+Status codes in use:
+
+- Succesful request: 0
+- Unchanged file: 0
+- Pending signature: 69
+- Misc error: 127
+
+Error handling:
+
+- Rejected: Wipe key, CSR and start over
