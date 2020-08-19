@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+use crate::CcError;
+use crate::CcError::*;
 use log::{debug, error, info};
 use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
@@ -18,7 +20,7 @@ pub const MIN_RSA_BITS: u32 = 2048;
 
 fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
     let cacert = X509::from_pem(&contents)?;
-    info!("Got CA cert: {:?}", cacert);
+    info!("Got CA certificate: {:?}", cacert);
     let pkey = cacert.public_key()?;
     let res = cacert.verify(&pkey)?;
     Ok(res)
@@ -29,36 +31,36 @@ fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
 ///
 /// Will Cause an error if passed invalid data  that cannot be parsed as
 /// a CA certificate
-pub fn verify_cacert(contents: &[u8]) -> Result<(), String> {
+pub fn verify_cacert(contents: &[u8]) -> Result<(), CcError> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
     match openssl_verify_cacert(contents) {
         Ok(true) => Ok(()),
-        Ok(false) => Err("CA cert not self-signed.".to_owned()),
+        Ok(false) => Err(CaCertNotSelfSigned),
         Err(e) => {
-            error!("Error parsing CA cert: {}", e);
-            Err("Unable to parse CA cert".to_owned())
+            error!("openssl_verify_cacert failed, underlying error: {:?}", e);
+            Err(CaCertParseFailure)
         }
     }
 }
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
 /// should probably take a path or similar rather than a string.
-pub fn verify_private_key(contents: &[u8]) -> Result<(), String> {
+pub fn verify_private_key(contents: &[u8]) -> Result<(), CcError> {
     // Matching of
     /*
         openssl pkey -noout -in $filename
     */
     let pkey = match PKey::private_key_from_pem(&contents) {
         Ok(c) => c,
-        Err(e) => {
-            error!("Error parsing private key: {}", e);
-            return Err("Unable to parse private key".to_owned());
-        }
+        Err(_e) => return Err(PrivateKeyParseFailure),
     };
     if pkey.bits() < MIN_RSA_BITS {
-        return Err("Private key is too short".to_owned());
+        // return Err("Private key is too short".to_owned());
+        return Err(PrivateKeyTooShort {
+            actual: pkey.bits(),
+        });
     }
     Ok(())
 }
@@ -71,12 +73,12 @@ fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
 }
 
 /// Create a new private key and return it
-pub fn create_private_key() -> Result<Vec<u8>, String> {
+pub fn create_private_key() -> Result<Vec<u8>, CcError> {
     match openssl_create_private_key(DESIRED_RSA_BITS) {
         Ok(c) => Ok(c),
         Err(e) => {
             error!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
-            Err("Could not create private RSA key".to_owned())
+            Err(PrivateKeyCreationFailure)
         }
     }
 }
@@ -277,7 +279,7 @@ fn openssl_verify_csr(
 ///
 /// Left undone: Verfiy that the CSR checks out against the server
 
-pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<(), String> {
+pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<(), CcError> {
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
@@ -285,10 +287,10 @@ pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<()
     let valid = openssl_verify_csr(csr_data, key_data, clientid);
     match valid {
         Ok(true) => Ok(()),
-        Ok(false) => Err("CSR not signed by our private key".to_owned()),
+        Ok(false) => Err(CsrSignedWithWrongKey),
         Err(e) => {
             error!("Error parsing CSR: {}", e);
-            Err("Unable to validate CSR".to_owned())
+            Err(CsrValidationFailure)
         }
     }
 }
@@ -361,7 +363,7 @@ pub fn create_csr(
     cacert_data: &[u8],
     private_key: &[u8],
     clientid: &str,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, CcError> {
     /*
     config:
         [ req ]
@@ -420,28 +422,74 @@ pub fn create_csr(
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
-            return Err("Error while building new CSR Subject ".to_owned());
+            return Err(CsrBuildSubjectFailure);
         }
     };
     let pemdata = match openssl_create_csr(private_key, subject) {
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
-            return Err("Error while building new Certificate Sign Request".to_owned());
+            return Err(CsrBuildFailure);
         }
     };
     Ok(pemdata)
 }
 
+// To enable logging for one testcase, change "#[test]" -> "#[test_env_log::test]",
+// when execute `cargo test -- --nocapture` or `cargo test --workspace --verbose -- --nocapture`
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::certs::blobs::testdata::{convert_string_to_vec8, TOO_SMALL_KEY_DATA1};
+    use crate::certs::blobs::testdata::{
+        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CRT_DATA1,
+        _VALID_CACERT_DATA1, _WORKAROUND_CACERT,
+    };
 
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
+        let golden_short_key_error = PrivateKeyTooShort { actual: 1024 };
         let result = verify_private_key(&key_with_too_few_bits);
         assert!(result.is_err());
+        assert_eq!(Some(golden_short_key_error), result.err());
+    }
+
+    #[test]
+    fn test_fail_on_key_with_random_data() {
+        let key_with_random_data = convert_string_to_vec8(RANDOM_DATA_KEY_DATA1);
+        let result = verify_private_key(&key_with_random_data);
+        assert!(result.is_err());
+        assert_eq!(Some(PrivateKeyParseFailure), result.err());
+    }
+
+    #[test_env_log::test]
+    fn test_accept_valid_cacert() {
+        let valid_cacert = convert_string_to_vec8(_VALID_CACERT_DATA1);
+        let result = verify_cacert(&valid_cacert);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_accept_valid_workaround_cacert() {
+        let valid_cacert = convert_string_to_vec8(_WORKAROUND_CACERT);
+        let result = verify_cacert(&valid_cacert);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_fail_on_signed_crtificate() {
+        let signed_cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let result = verify_cacert(&signed_cert);
+        assert!(result.is_err());
+        assert_eq!(Some(CaCertNotSelfSigned), result.err());
+    }
+
+    #[test]
+    fn test_fail_on_random_data_as_certificate() {
+        let random_data = convert_string_to_vec8(RANDOM_DATA_KEY_DATA1);
+        let result = verify_cacert(&random_data);
+        assert!(result.is_err());
+        assert_eq!(Some(CaCertParseFailure), result.err());
     }
 }

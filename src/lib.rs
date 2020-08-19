@@ -4,13 +4,11 @@
 pub mod certs;
 pub mod network;
 
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum CaramelClientLibError {
+#[derive(thiserror::Error, Debug, PartialEq)]
+pub enum CcError {
     // certs.rs errors
     #[error("Unable to parse private key")]
-    PrivateKeyParseError,
+    PrivateKeyParseFailure,
 
     #[error(
         "Private key is too short, {actual:} bits < {} bits threshold",
@@ -19,20 +17,29 @@ pub enum CaramelClientLibError {
     PrivateKeyTooShort { actual: u32 },
 
     #[error("Could not create private RSA key")]
-    PrivateKeyCreationError,
+    PrivateKeyCreationFailure,
 
     #[error("CA certificate not self-signed")]
-    CaCertNotSelfSignedError,
+    CaCertNotSelfSigned,
 
     #[error("Unable to parse CA cert")]
     CaCertParseFailure,
 
+    #[error("Error while building new CSR Subject")]
+    CsrBuildSubjectFailure,
+
+    #[error("Error while building new Certificate Sign Request")]
+    CsrBuildFailure,
+
+    #[error("CSR (certificat signing request) not signed by our private key CSR")]
+    CsrSignedWithWrongKey,
+
+    #[error("Unable to validate CSR (certificat signing request)")]
+    CsrValidationFailure,
+
     // network.rs errors
     #[error("Unable to download certificate")]
-    DownloadCertificateFailed,
-
-    #[error("Unknown caramel client library error")]
-    UnknownCaramelClientError,
+    DownloadCertificateFailure,
 
     #[error("Error from Libcurl during network operations")]
     LibCurl,
@@ -45,4 +52,8 @@ pub enum CaramelClientLibError {
 
     #[error("The CA certificate was not found.")]
     CaNotFound,
+
+    // Cludge to make other parts of the code return CcError instead of String
+    #[error("***ERROR*** WrappedString is no good!!!: {0}")]
+    WrappedString(String),
 }

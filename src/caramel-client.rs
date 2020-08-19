@@ -3,6 +3,8 @@
 
 use caramel_client::certs;
 use caramel_client::network;
+use caramel_client::CcError;
+use caramel_client::CcError::WrappedString;
 use log::{debug, error, info};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -32,7 +34,7 @@ impl CertificateRequest {
 
     /// If no CA certificate exists, download it and save to disk
     /// Will always verify the CA certificate according to some basic parsing rules.
-    pub fn ensure_cacert(&self) -> Result<(), String> {
+    pub fn ensure_cacert(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
 
         if !ca_path.exists() {
@@ -43,7 +45,7 @@ impl CertificateRequest {
 
             let ca_data = match network::fetch_root_cert(&self.server) {
                 Ok(data) => data,
-                Err(e) => return Err(format!("{}", e)),
+                Err(e) => return Err(WrappedString(format!("{}", e))),
             };
             // Open the file for writing with "Create new" option, which causes a failure if this file
             // already exists.
@@ -65,7 +67,7 @@ impl CertificateRequest {
     /// 1. If no private key exists, create one and save to disk.
     /// 2. Verify existing key file can be loaded and passes our validation
     ///
-    pub fn ensure_key(&self) -> Result<(), String> {
+    pub fn ensure_key(&self) -> Result<(), CcError> {
         let key_path = Path::new(&self.key_file_name);
 
         if !key_path.exists() {
@@ -83,7 +85,7 @@ impl CertificateRequest {
     /// 2. Load the CSR from disk and ensure that our private key matches the CSR request public
     ///    key.
     ///
-    pub fn ensure_csr(&self) -> Result<(), String> {
+    pub fn ensure_csr(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let csr_path = Path::new(&self.csr_file_name);
         let key_path = Path::new(&self.key_file_name);
