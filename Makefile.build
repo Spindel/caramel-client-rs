@@ -1,0 +1,4 @@
+IMAGE_REPO = registry.gitlab.com/modioab/caramel-client-rs/build
+IMAGE_DOCKERFILE = Dockerfile.build
+
+include build.mk

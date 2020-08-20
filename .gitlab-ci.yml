@@ -33,7 +33,6 @@ test:cargo:
 #      - tags
 
 
-
 crosscompile:
   allow_failure: true
   before_script:
@@ -123,3 +122,26 @@ rebase:clippy:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
       -x 'cargo clippy -- -D clippy::pedantic -D clippy::cargo'
+
+
+# This build the "build" container
+container:build:
+  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  rules:
+    # Build when any of these files change
+    - changes:
+      - Dockefile.build
+      - Makefile.build
+      - build.mk
+    # Always build from scheduled builds
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+    # Allow users to _manually_ build this from merge-requests in cases.
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    # Do not build on other conditions
+    - when: never
+  script:
+    - make login
+    # Build the dev containers
+    - make -f Makefile.build build-publish
