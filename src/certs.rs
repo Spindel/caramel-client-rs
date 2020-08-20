@@ -2,7 +2,6 @@
 // Copyright 2020 Modio AB
 
 use crate::CcError;
-use crate::CcError::*;
 use log::{debug, error, info};
 use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
@@ -37,10 +36,10 @@ pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
     */
     match openssl_verify_cacert(ca_cert_data) {
         Ok(true) => Ok(()),
-        Ok(false) => Err(CaCertNotSelfSigned),
+        Ok(false) => Err(CcError::CaCertNotSelfSigned),
         Err(e) => {
             error!("openssl_verify_cacert failed, underlying error: {:?}", e);
-            Err(CaCertParseFailure)
+            Err(CcError::CaCertParseFailure)
         }
     }
 }
@@ -54,11 +53,11 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
     */
     let pkey = match PKey::private_key_from_pem(&private_key_data) {
         Ok(c) => c,
-        Err(_e) => return Err(PrivateKeyParseFailure),
+        Err(_e) => return Err(CcError::PrivateKeyParseFailure),
     };
     if pkey.bits() < MIN_RSA_BITS {
         // return Err("Private key is too short".to_owned());
-        return Err(PrivateKeyTooShort {
+        return Err(CcError::PrivateKeyTooShort {
             actual: pkey.bits(),
         });
     }
@@ -78,7 +77,7 @@ pub fn create_private_key() -> Result<Vec<u8>, CcError> {
         Ok(c) => Ok(c),
         Err(e) => {
             error!("Error creating {} bits RSA key: {}", DESIRED_RSA_BITS, e);
-            Err(PrivateKeyCreationFailure)
+            Err(CcError::PrivateKeyCreationFailure)
         }
     }
 }
@@ -291,10 +290,10 @@ pub fn verify_csr(
     let valid = openssl_verify_csr(csr_data, private_key_data, client_id);
     match valid {
         Ok(true) => Ok(()),
-        Ok(false) => Err(CsrSignedWithWrongKey),
+        Ok(false) => Err(CcError::CsrSignedWithWrongKey),
         Err(e) => {
             error!("Error parsing CSR: {}", e);
-            Err(CsrValidationFailure)
+            Err(CcError::CsrValidationFailure)
         }
     }
 }
@@ -426,14 +425,14 @@ pub fn create_csr(
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
-            return Err(CsrBuildSubjectFailure);
+            return Err(CcError::CsrBuildSubjectFailure);
         }
     };
     let pemdata = match openssl_create_csr(private_key_data, subject) {
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
-            return Err(CsrBuildFailure);
+            return Err(CcError::CsrBuildFailure);
         }
     };
     Ok(pemdata)
@@ -451,7 +450,7 @@ mod tests {
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
-        let golden_short_key_error = PrivateKeyTooShort { actual: 1024 };
+        let golden_short_key_error = CcError::PrivateKeyTooShort { actual: 1024 };
         let result = verify_private_key(&key_with_too_few_bits);
         assert!(result.is_err());
         assert_eq!(Some(golden_short_key_error), result.err());
@@ -462,7 +461,7 @@ mod tests {
         let key_with_random_data = convert_string_to_vec8(RANDOM_DATA_KEY_DATA1);
         let result = verify_private_key(&key_with_random_data);
         assert!(result.is_err());
-        assert_eq!(Some(PrivateKeyParseFailure), result.err());
+        assert_eq!(Some(CcError::PrivateKeyParseFailure), result.err());
     }
 
     #[test_env_log::test]
@@ -485,7 +484,7 @@ mod tests {
         let signed_cert = convert_string_to_vec8(VALID_CRT_DATA1);
         let result = verify_cacert(&signed_cert);
         assert!(result.is_err());
-        assert_eq!(Some(CaCertNotSelfSigned), result.err());
+        assert_eq!(Some(CcError::CaCertNotSelfSigned), result.err());
     }
 
     #[test]
@@ -493,7 +492,7 @@ mod tests {
         let random_data = convert_string_to_vec8(RANDOM_DATA_KEY_DATA1);
         let result = verify_cacert(&random_data);
         assert!(result.is_err());
-        assert_eq!(Some(CaCertParseFailure), result.err());
+        assert_eq!(Some(CcError::CaCertParseFailure), result.err());
     }
 
     #[test]

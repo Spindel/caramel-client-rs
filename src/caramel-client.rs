@@ -4,7 +4,6 @@
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
-use caramel_client::CcError::WrappedString;
 use log::{debug, error, info};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
@@ -45,7 +44,7 @@ impl CertificateRequest {
 
             let ca_data = match network::fetch_root_cert(&self.server) {
                 Ok(data) => data,
-                Err(e) => return Err(WrappedString(format!("{}", e))),
+                Err(e) => return Err(CcError::WrappedString(format!("{}", e))),
             };
             // Open the file for writing with "Create new" option, which causes a failure if this file
             // already exists.
