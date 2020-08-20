@@ -33,6 +33,7 @@ test:cargo:
 #      - tags
 
 
+
 crosscompile:
   allow_failure: true
   before_script:
@@ -47,6 +48,32 @@ crosscompile:
     - cargo check --target armv7-unknown-linux-gnueabihf
     # Build
     - cargo build --release --target armv7-unknown-linux-gnueabihf
+
+
+# This builds the "client" container that others can use to run the application.
+release:container:
+  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  rules:
+    # Build when any of these files change
+    - changes:
+      - Dockefile
+      - Makefile
+      - build.mk
+    # Always build on tags
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+    # Always build from scheduled builds
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+    # Allow users to _manually_ build this from merge-requests
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+    # Do not build on other conditions
+    - when: never
+  script:
+    - make login
+    # Build the client container
+    - make -f Makefile build-publish
 
 .rebase: &rebase
   allow_failure: true

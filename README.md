@@ -173,3 +173,9 @@ device's account.
 For thise use-case, it is important to never attempt to store a file directly
 to disk, and only return file-like objects that can be stored in system
 key-chains or per-application databases.
+
+
+## Using the container
+
+    # podman pull registry.gitlab.com/modioab/caramel-client-rs/client:latest
+    # podman run -ti --rm=true -v $(pwd):/data:rw registry.gitlab.com/modioab/caramel-client-rs/client:latest CA.EXAMPLE.COM  TEST-CERTIFICATE-PLEASE-IGNORE
