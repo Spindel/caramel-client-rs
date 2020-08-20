@@ -4,18 +4,18 @@ Rust Caramel client and Library
 
 ## What is it
 
-Caramel is a simple Certificate Authority that lets users set up their own root
-CA, sign clients & servers, and thereby identify machines to machinse using TLS
-Client Certificate Authentication.
+Caramel is a simple Certificate Authority (CA) that lets users set up their own
+root CA, sign clients & servers, and thereby identify machines to machinse
+using TLS (Transport Layer Security) with Client Certificate Authentication.
 
 This is a _client_ that communicates against a [Caramel Server](https://github.com/ModioAB/caramel/).
 
 It is responsible for:
 
-1. Generating private keys
+1. Generating Private Keys
 2. Creating CSR (Certificate Sign Requests)
 3. Posting said CSR to the Caramel Server
-4. Fetching and the signed certificates from the Caramel Server
+4. Fetching signed certificates from the Caramel Server
 
 
 ## Why use it
@@ -83,7 +83,7 @@ up-to-date.
 This service is then triggered with a timer, and/or depended upon by other
 services using a simple drop-in file.
 
-The above unit will then make sure that in /var/lib/example/tls/  there are a
+The above unit will then make sure that in /var/lib/example/tls/ there are a
 files for CA certificate, Private Key, and a signed Certificate file for other
 applications to use.
 
@@ -93,7 +93,7 @@ finally exiting with success once the CA has _signed_ the request.
 
 This is because following services will require a certificate to continue
 succesfully, thus they are supposed to wait until a certificate has been
-received.  Therefore, the simplest mode of the client is to loop forever as it
+received. Therefore, the simplest mode of the client is to loop forever as it
 waits for the server to sign the request, something that requires manual work
 by an administrator.
 
@@ -106,7 +106,7 @@ status of the application.
 ### Embedded client application
 
 On embedded firmware, we do not want to ship a large amount of public CA
-certificates, and want to protect us against MITM and other interesting
+certificates, and want to protect us against MITM/Man In The Middle) and other interesting
 problems, so we embed the CA certificate with the hardware.
 
 For this use-case, the client is called by other applications, thus signifying
@@ -119,7 +119,7 @@ scratch" in case of certain error-codes from the Caramel server.
 Here, the application uses a "well known" serial number from hardware, or
 the MAC address of the device, as their client-id.
 
-Unlike the command-line client above, the CA-certificate should be able to use
+Unlike the command-line client above, the CA certificate should be able to use
 one specified elsewhere, and the Private Key and Certificate are stored in a
 single well-known file with specific ownership and permissions.
 
@@ -134,7 +134,7 @@ To facilitate debugging and monitoring, the Client ID is part of the user-agent
 in this mode of operation.
 
 And to further grant identification, if the client deems that it has a useable
-certificate, it defaults to passing a client certificate to the server.
+CA certificate, it defaults to passing a client certificate to the server.
 
 This client also compares the time-stamp of the server-side and our local
 certificate, and doesn't fetch the file new in case it hasn't been updated, in
@@ -144,6 +144,7 @@ Status codes in use:
 
 - Succesful request: 0
 - Unchanged file: 0
+- Locked file: 1
 - Pending signature: 69
 - Misc error: 127
 
