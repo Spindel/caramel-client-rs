@@ -1,6 +1,11 @@
 use caramel_client;
 use std::io::Write;
 
+// Note, this example almost 1:1 implements how the "normal"  Caramel File Request type works.
+// Perhaps this example should instead open an SQLite-database and use that?
+//
+// I.e. Should the example be a simple adaptor on the other logic?
+
 // We pin a CA-certificate here. If you run the client on a machine that does not have a
 // certificate store, this is important.
 //
@@ -68,53 +73,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     /// A new Request. A request always binds to a CA (whom will sign it) and an `client_id` that
     /// identifies us.
-    let mut CR = caramel_client::CertificateRequest::new_with_ca(client_id, CA);
+    let mut caramel_request = caramel_client::CertificateRequest::new_with_ca(client_id, CA);
 
     /// This code is extra verbose, and you should really try to use a keychain for the private
     /// key. If you want a file-backed API, there's a specific helper for that which you can use
     /// instead. (See `examples/minimal.rs`)
     if !key_path.exists() {
         /// Generate a new Private Key File.
-        CR.new_key().expect("Crypto error generating key");
+        caramel_request
+            .new_key()
+            .expect("Crypto error generating key");
 
         /// Read out the key file, so we can write it to our secure storage.
-        let key_file_content = CR.key_file();
-        println!(
-            "Save this somewhere safe, in a keychain or so: \n{}",
-            key_file_content
-        );
+        let key_file_content = caramel_request.key_file();
+        println!("Save this somewhere safe, in a keychain or so.");
+        println!("This example saves it to disk without caring about security.");
+        println!("\n{}", key_file_content);
         let mut file =
             std::fs::File::create(&key_path).expect("Error opening key file for writing");
         file.write_all(&key_file_contents)
             .expect("Error writing key file to disk");
-    } else {
-        let key_data = std::fs::read(key_path).expect("Error reading private key from disk");
-        /// Load the private key into the Request first.
-        CR.load_key(key_data).expect("Invalid key?");
     }
+    let key_data = std::fs::read(key_path).expect("Error reading private key from disk");
+    /// Load the private key into the Request first.
+    caramel_request.load_key(key_data).expect("Invalid key?");
 
     /// We now have a key. First, new CSR if need be.
     if !csr_path.exists() {
         /// Generate a new Certificate Request file.
-        CR.new_csr().expect("Crypto error generating CSR");
+        caramel_request
+            .new_csr()
+            .expect("Crypto error generating CSR");
         /// Read out the CSR data, so we can write it to disk.
-        let csr_file_content = CR.csr_file();
+        let csr_file_content = caramel_request.csr_file();
         println!("This file can be re-generated or loaded from disk again, and contains nothing secret: \n{}", csr_file_content);
         let mut file =
             std::fs::File::create(&csr_path).expect("Error opening CSR file for writing");
         file.write_all(&csr_file_content)
             .expect("Error writing CSR file to disk");
-    } else {
-        /// CSR already existed, now we load it instead.
-        /// We load the CSR (Certificate Sign Request) here, this data is public, but needs to match
-        /// the PRIVATE KEY from above.
-        let csr_data = std::fs::read(csr_file).expect("Error reading CSR file from disk");
-        /// Load the CSR into the request (Certificate Sign Request)
-        CR.load_csr(csr_data).expect("Invalid CSR?");
-
-        /// Since we KNOW that the server does not have this CSR, we perform a POST of it.
-        CR.post_request().expect("Error posting request to server");
     }
+    /// CSR already existed, now we load it instead.
+    /// We load the CSR (Certificate Sign Request) here, this data is public, but needs to match
+    /// the PRIVATE KEY from above.
+    let csr_data = std::fs::read(csr_file).expect("Error reading CSR file from disk");
+    /// Load the CSR into the request (Certificate Sign Request)
+    caramel_request.load_csr(csr_data).expect("Invalid CSR?");
 
     /// Attempt to download the Certificate that matches our Request from the server.
     /// This part of the request should be called regularly.
@@ -125,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// After the download, it's usually a good idea to write it to disk, keychain or register it
     /// with your TLS libraries. Since that may cause a reconnection, users might want to take care
     /// to only update if the certificate has changed.
-    match CR.fetch_certificate() {
+    match caramel_request.fetch_certificate() {
         /// Happy path.
         /// We got the certificate and can now continue
         Ok(CaramelClient::Status::Downloaded(certificate)) => {
@@ -152,7 +155,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         /// Maybe we have never done that before? Maybe the server forgot about us?
         /// Maybe the CSR and the Server do not match each-other?
         Err(CaramelClient::Error::Notfound) => {
-            CR.post_request().expect("Error posting request to server");
+            caramel_request
+                .post_request()
+                .expect("Error posting request to server");
         }
         /// Other errors, typoed DNS, internal server error, offline, etc.
         /// Usually, "try again later" or ask an operator.
