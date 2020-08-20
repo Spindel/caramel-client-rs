@@ -9,7 +9,7 @@ pub mod testdata {
     }
 
     // ca.sommar.modio.se.cacert
-    pub const _VALID_CACERT_DATA1: &str = "-----BEGIN CERTIFICATE-----
+    pub const VALID_CACERT_DATA1: &str = "-----BEGIN CERTIFICATE-----
 MIIGDzCCA/egAwIBAgIQWAd0QqcLEeqSuH4RzI9IqTANBgkqhkiG9w0BAQ0FADBW
 MQswCQYDVQQGEwJTRTEQMA4GA1UECgwHTW9kaW9BQjEPMA0GA1UECwwGU29tbWFy
 MSQwIgYDVQQDDBtDYXJhbWVsIFNpZ25pbmcgQ2VydGlmaWNhdGUwHhcNMjAwNjA1
@@ -46,8 +46,9 @@ Yegr7LgJOyQdp1MtVENfRFL5Ag==
 -----END CERTIFICATE-----
 ";
 
-    // ca.modio.se.cacert
-    pub const _WORKAROUND_CACERT: &str = "-----BEGIN CERTIFICATE-----
+    // ca.modio.se.cacert has some `interesting` misfeatures.
+    // Including an subject in the "wrong order" and a suspicious version number
+    pub const WORKAROUND_CACERT: &str = "-----BEGIN CERTIFICATE-----
 MIIGhjCCBG6gAwIBAwIBADANBgkqhkiG9w0BAQ0FADCBhjELMAkGA1UEBhMCU0Ux
 EDAOBgNVBAsMB0NhcmFtZWwxEzARBgNVBAcMCkxpbmvDtnBpbmcxETAPBgNVBAoM
 CE1vZGlvIEFCMRcwFQYDVQQIDA7DlnN0ZXJnw7Z0bGFuZDEkMCIGA1UEAwwbQ2Fy
@@ -144,7 +145,7 @@ gDqnhtySwVDIEfRfdlrsvoVcKN45f4K63NNbeiwiGktTfxza/UGjniCpoBBRImo9
 ";
 
     // 06bc4ab2-dbaf-11ea-9abc-00155dcdee8d.key
-    pub const _VALID_KEY_DATA1: &str = "-----BEGIN RSA PRIVATE KEY-----
+    pub const VALID_KEY_DATA1: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAtHkqLKRbMYyyQ0diUtuLW/kpZdxIAji9fjdOK1RJXZz8GKiz
 w2EF3vT0IQ3fdF4CW1eF6WFfdu8bpCAQBbkTHvMsqR9xuPiSlIw2RN3NOVxknTon
 RS7VO+FSxfQSdSCPYpFITVCCrRpa7IK1Mp8C+RygM/rbC6aKxKREq8Kkw2PFkC74
@@ -199,5 +200,26 @@ Romanen skrevs under Strindbergs vistelse i Schweiz och södra Tyskland.
 De inledande raderna är en så kallad in medias res-fras:
 *Han kom som ett yrväder en aprilafton och hade ett höganäskrus i en svångrem om halsen.*
 -----END RSA PRIVATE KEY-----
+";
+
+    // Uses CA_MODIO_SE_CACERT + VALID_KEY_DATA1, with Work-around logic.
+    pub const WORKAROUND_CSR_DATA1: &str = "-----BEGIN CERTIFICATE REQUEST-----
+MIIC1TCCAb0CAQAwgY8xCzAJBgNVBAYTAlNFMRcwFQYDVQQIDA7DlnN0ZXJnw7Z0
+bGFuZDETMBEGA1UEBwwKTGlua8O2cGluZzERMA8GA1UECgwITW9kaW8gQUIxEDAO
+BgNVBAsMB0NhcmFtZWwxLTArBgNVBAMMJDA2YmM0YWIyLWRiYWYtMTFlYS05YWJj
+LTAwMTU1ZGNkZWU4ZDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALR5
+KiykWzGMskNHYlLbi1v5KWXcSAI4vX43TitUSV2c/Bios8NhBd709CEN33ReAltX
+helhX3bvG6QgEAW5Ex7zLKkfcbj4kpSMNkTdzTlcZJ06J0Uu1TvhUsX0EnUgj2KR
+SE1Qgq0aWuyCtTKfAvkcoDP62wumisSkRKvCpMNjxZAu+LPkPky/VaZx1qaVHwy3
++Z+nuWLtJfIQoc/fG7Z27DGcNT8LWZ/OqHuUBcOk45HqWF+yF7dyVJb6lQDJSPvu
+jOx0WktanIoLpr8/riv8saSkN7yyZ4323Z4pRw2CaPgLac4hrdejVCYL+xiW/pzM
+1AXoDDakagB+7qGcvZECAwEAAaAAMA0GCSqGSIb3DQEBCwUAA4IBAQBKOZqH/Qhh
+ucXEwuGdNOMtql/5ejluQsx60Pr+ILvWlHAwYiWGHeV7Qyp7v83uXo78tDl8kwLV
+rJNovrXC08wY2WNpl2lt3u1tU7P3B5PajBkXrY1Tl/dyA8hAWVmi4eAUoPDTr6i3
+X+uw8ZnBXx8cB6AyBdGa/Ggu8ntmW8hWLMWoe4NpxFpAnlqhuWZrJEbqxnYITBU4
+imPopMEynqYdsZCGtw4LXO0jqKjD4mZHIsltV5JNNh8AzOnlZWhflqmEUB7UtuVE
+2g/1ZJ2ru2VmHiD7uPcTAJzLjnnZjZRC7l4oxEaw+UqMTDsRLd7ipWMwGn9NdB9J
+JLMstYxO4R/g
+-----END CERTIFICATE REQUEST-----
 ";
 }

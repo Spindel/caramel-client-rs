@@ -18,8 +18,8 @@ const MAX_CN_LENGTH: usize = 64;
 const DESIRED_RSA_BITS: u32 = 2048;
 pub const MIN_RSA_BITS: u32 = 2048;
 
-fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
-    let cacert = X509::from_pem(&contents)?;
+fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
+    let cacert = X509::from_pem(&ca_cert_data)?;
     info!("Got CA certificate: {:?}", cacert);
     let pkey = cacert.public_key()?;
     let res = cacert.verify(&pkey)?;
@@ -31,11 +31,11 @@ fn openssl_verify_cacert(contents: &[u8]) -> Result<bool, ErrorStack> {
 ///
 /// Will Cause an error if passed invalid data  that cannot be parsed as
 /// a CA certificate
-pub fn verify_cacert(contents: &[u8]) -> Result<(), CcError> {
+pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
-    match openssl_verify_cacert(contents) {
+    match openssl_verify_cacert(ca_cert_data) {
         Ok(true) => Ok(()),
         Ok(false) => Err(CaCertNotSelfSigned),
         Err(e) => {
@@ -47,12 +47,12 @@ pub fn verify_cacert(contents: &[u8]) -> Result<(), CcError> {
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
 /// should probably take a path or similar rather than a string.
-pub fn verify_private_key(contents: &[u8]) -> Result<(), CcError> {
+pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
     // Matching of
     /*
         openssl pkey -noout -in $filename
     */
-    let pkey = match PKey::private_key_from_pem(&contents) {
+    let pkey = match PKey::private_key_from_pem(&private_key_data) {
         Ok(c) => c,
         Err(_e) => return Err(PrivateKeyParseFailure),
     };
@@ -118,10 +118,10 @@ fn workaround_subject() -> (X509Name, X509Name) {
         .append_entry_by_nid(Nid::LOCALITYNAME, "Linköping")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
+        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
         .unwrap();
     after
-        .append_entry_by_nid(Nid::ORGANIZATIONNAME, "Modio AB")
+        .append_entry_by_nid(Nid::ORGANIZATIONALUNITNAME, "Caramel")
         .unwrap();
     after
         .append_entry_by_nid(Nid::COMMONNAME, "Caramel Signing Certificate")
@@ -182,7 +182,7 @@ Replaced: '{:?}'",
 ///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9`
 /// It passes through all data-points _except_ CommonName, which gets set to `client_id`
 /// This code works with OpenSSL datatypes and errors
-fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Name, ErrorStack> {
+fn make_inner_subject(ca_subject: &X509NameRef, client_id: &str) -> Result<X509Name, ErrorStack> {
     use openssl::nid::Nid;
 
     let mut subject = X509Name::builder()?;
@@ -192,8 +192,8 @@ fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Na
         let entry_text = entry.data().as_utf8()?;
 
         if entry_nid == Nid::COMMONNAME {
-            debug!("Changing {:?}=={} => {}", entry_nid, &entry_text, clientid);
-            subject.append_entry_by_nid(Nid::COMMONNAME, clientid)?;
+            debug!("Changing {:?}=={} => {}", entry_nid, &entry_text, client_id);
+            subject.append_entry_by_nid(Nid::COMMONNAME, client_id)?;
         } else {
             debug!("Passing through {:?}=={}", &entry_nid, &entry_text);
             subject.append_entry_by_nid(entry_nid, &entry_text)?;
@@ -203,12 +203,12 @@ fn make_inner_subject(ca_subject: &X509NameRef, clientid: &str) -> Result<X509Na
     Ok(our_subject)
 }
 
-/// Create a subject from a `cacert_data` + our expected clientid
+/// Create a subject from a `ca_cert_data` + our expected `client_id`
 /// The general case rule is to take the CA cert and _only_ replace the common name.
 /// This means that all the other fields in the CA subject should match exactly.
 ///
 /// there is also a special case that is handled when reading out the CA certificate.
-fn openssl_make_subject(cacert_data: &[u8], clientid: &str) -> Result<X509Name, ErrorStack> {
+fn openssl_make_subject(ca_cert_data: &[u8], client_id: &str) -> Result<X509Name, ErrorStack> {
     //  This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
@@ -236,21 +236,21 @@ fn openssl_make_subject(cacert_data: &[u8], clientid: &str) -> Result<X509Name, 
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
-    let subj = get_ca_subject(&cacert_data)?;
+    let subj = get_ca_subject(&ca_cert_data)?;
     debug!("Got ca subject   {:?}", subj.as_ref());
-    let new_subject = make_inner_subject(&subj, clientid)?;
+    let new_subject = make_inner_subject(&subj, client_id)?;
     debug!("Created new subject '{:?}'", new_subject.as_ref());
     Ok(new_subject)
 }
 
-/// See if commonname of the subject matches an expected clientid
+/// See if commonname of the subject matches an expected client_id
 ///
-fn check_commoname_match(subject: &x509::X509NameRef, clientid: &str) -> Result<bool, ErrorStack> {
+fn check_commoname_match(subject: &x509::X509NameRef, client_id: &str) -> Result<bool, ErrorStack> {
     use openssl::nid::Nid;
     let entry = subject.entries_by_nid(Nid::COMMONNAME).next().unwrap();
     let raw_name = entry.data().as_utf8()?;
     let name = raw_name.to_string();
-    if clientid != name {
+    if client_id != name {
         return Ok(false);
     }
     // MAX_CN_LENGTH is from the caramel server codebase as of 2020-07
@@ -262,14 +262,14 @@ fn check_commoname_match(subject: &x509::X509NameRef, clientid: &str) -> Result<
 
 fn openssl_verify_csr(
     csr_data: &[u8],
-    key_data: &[u8],
-    clientid: &str,
+    private_key_data: &[u8],
+    client_id: &str,
 ) -> Result<bool, ErrorStack> {
-    let pkey = PKey::private_key_from_pem(&key_data)?;
+    let pkey = PKey::private_key_from_pem(&private_key_data)?;
     let csr = X509Req::from_pem(&csr_data)?;
     let verified = csr.verify(&pkey)?;
     let subject = csr.subject_name();
-    let matching_name = check_commoname_match(subject, clientid)?;
+    let matching_name = check_commoname_match(subject, client_id)?;
     Ok(verified && matching_name)
 }
 
@@ -279,12 +279,16 @@ fn openssl_verify_csr(
 ///
 /// Left undone: Verfiy that the CSR checks out against the server
 
-pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<(), CcError> {
+pub fn verify_csr(
+    csr_data: &[u8],
+    private_key_data: &[u8],
+    client_id: &str,
+) -> Result<(), CcError> {
     /*
             openssl req -noout -verify -in csrfile -key keyfile
     */
 
-    let valid = openssl_verify_csr(csr_data, key_data, clientid);
+    let valid = openssl_verify_csr(csr_data, private_key_data, client_id);
     match valid {
         Ok(true) => Ok(()),
         Ok(false) => Err(CsrSignedWithWrongKey),
@@ -298,16 +302,16 @@ pub fn verify_csr(csr_data: &[u8], key_data: &[u8], clientid: &str) -> Result<()
 pub fn openssl_verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
-    key_data: &[u8],
-    clientid: &str,
+    private_key_data: &[u8],
+    client_id: &str,
 ) -> Result<bool, ErrorStack> {
-    let private_key = PKey::private_key_from_pem(&key_data)?;
+    let private_key = PKey::private_key_from_pem(&private_key_data)?;
     let ca_cert = X509::from_pem(&ca_cert_data)?;
     let cert = X509::from_pem(&cert_data)?;
 
     let subject = cert.subject_name();
     let ca_pubkey = ca_cert.public_key()?;
-    let ok_name = check_commoname_match(subject, clientid)?;
+    let ok_name = check_commoname_match(subject, client_id)?;
     let ok_signature = cert.verify(&ca_pubkey)?;
     let cert_pubkey = cert.public_key()?;
     let ok_key = private_key.public_eq(&cert_pubkey);
@@ -322,13 +326,13 @@ pub fn openssl_verify_cert(
 pub fn verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
-    private_key: &[u8],
-    clientid: &str,
+    private_key_data: &[u8],
+    client_id: &str,
 ) -> Result<(), String> {
     /*
      * openssl verify -CAfile ca_cert_file_name, temp_cert_file_name
      */
-    match openssl_verify_cert(cert_data, ca_cert_data, private_key, clientid) {
+    match openssl_verify_cert(cert_data, ca_cert_data, private_key_data, client_id) {
         Ok(true) => Ok(()),
         Ok(false) => Err("Certificates load but do not match".to_owned()),
         Err(e) => {
@@ -360,9 +364,9 @@ fn openssl_create_csr(private_key_data: &[u8], subject: X509Name) -> Result<Vec<
 /// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough
 /// placeholder
 pub fn create_csr(
-    cacert_data: &[u8],
-    private_key: &[u8],
-    clientid: &str,
+    ca_cert_data: &[u8],
+    private_key_data: &[u8],
+    client_id: &str,
 ) -> Result<Vec<u8>, CcError> {
     /*
     config:
@@ -418,14 +422,14 @@ pub fn create_csr(
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
 
-    let subject = match openssl_make_subject(cacert_data, &clientid) {
+    let subject = match openssl_make_subject(ca_cert_data, &client_id) {
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
             return Err(CsrBuildSubjectFailure);
         }
     };
-    let pemdata = match openssl_create_csr(private_key, subject) {
+    let pemdata = match openssl_create_csr(private_key_data, subject) {
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
@@ -441,10 +445,9 @@ pub fn create_csr(
 mod tests {
     use super::*;
     use crate::certs::blobs::testdata::{
-        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CRT_DATA1,
-        _VALID_CACERT_DATA1, _WORKAROUND_CACERT,
+        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CACERT_DATA1,
+        VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
     };
-
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
@@ -464,14 +467,14 @@ mod tests {
 
     #[test_env_log::test]
     fn test_accept_valid_cacert() {
-        let valid_cacert = convert_string_to_vec8(_VALID_CACERT_DATA1);
+        let valid_cacert = convert_string_to_vec8(VALID_CACERT_DATA1);
         let result = verify_cacert(&valid_cacert);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_accept_valid_workaround_cacert() {
-        let valid_cacert = convert_string_to_vec8(_WORKAROUND_CACERT);
+        let valid_cacert = convert_string_to_vec8(WORKAROUND_CACERT);
         let result = verify_cacert(&valid_cacert);
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -491,5 +494,63 @@ mod tests {
         let result = verify_cacert(&random_data);
         assert!(result.is_err());
         assert_eq!(Some(CaCertParseFailure), result.err());
+    }
+
+    #[test]
+    fn test_verify_csr_happy() {
+        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+
+        let result = verify_csr(&csr, &key, &client_id);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_verify_csr_failure() {
+        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+        let key = create_private_key().unwrap();
+        let result = verify_csr(&csr, &key, &client_id);
+
+        match result {
+            Err(CcError::CsrSignedWithWrongKey) => assert!(true),
+            Ok(_) => assert!(false, "Should not be ok with different key"),
+            Err(_) => assert!(false, "Should not generate different errors"),
+        }
+    }
+
+    /// Normal functionality, subject passed through and CSR generated
+    #[test]
+    fn test_making_csr_no_override() {
+        let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let ca_sommar_modio_se = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let expected = convert_string_to_vec8(VALID_CSR_DATA1);
+
+        let result = create_csr(
+            &ca_sommar_modio_se,
+            &valid_key,
+            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
+        );
+        assert!(result.is_ok());
+        let csr = result.unwrap();
+        assert_eq!(csr, expected);
+    }
+
+    #[test]
+    /// Override functionality, should fail
+    fn test_making_csr_with_override() {
+        let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let ca_modio_se = convert_string_to_vec8(WORKAROUND_CACERT);
+
+        let result = create_csr(
+            &ca_modio_se,
+            &valid_key,
+            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
+        );
+        assert!(result.is_ok());
+        let csr = result.unwrap();
+        let csr_text = std::str::from_utf8(&csr).unwrap();
+        assert_eq!(csr_text, WORKAROUND_CSR_DATA1);
     }
 }
