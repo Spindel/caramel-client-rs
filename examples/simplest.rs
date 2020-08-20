@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// Try three times, does not necessarily wait for the server to sign a request
     caramel_request
         .try_loop(attempts)
-        .expect("Something went wrong in the first attempt");
+        .expect("Something went wrong in the one of our three attempts");
     /// Try forever. Does what it says on the tin, will retry all steps until we get a working
     /// certificate, or a hard failure that we cannot deal with.
     caramel_request
