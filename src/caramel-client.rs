@@ -19,6 +19,7 @@ struct CertificateRequest {
     ca_cert_file_name: String,
 }
 
+/// Implement `CertificateRequest` handling.
 impl CertificateRequest {
     pub fn new(server: &str, client_id: &str) -> CertificateRequest {
         CertificateRequest {
@@ -31,8 +32,10 @@ impl CertificateRequest {
         }
     }
 
-    /// If no CA certificate exists, download it and save to disk
+    /// If no CA certificate exists, download it and save to disk.
     /// Will always verify the CA certificate according to some basic parsing rules.
+    /// #Errors
+    /// Will pass through `CcErrors`on CA certificate errors.
     pub fn ensure_cacert(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
 
@@ -65,7 +68,8 @@ impl CertificateRequest {
     /// Ensure that a local key exists in our key filename.
     /// 1. If no private key exists, create one and save to disk.
     /// 2. Verify existing key file can be loaded and passes our validation
-    ///
+    /// #Errors
+    /// Will pass through `CcErrors`on private key errors.
     pub fn ensure_key(&self) -> Result<(), CcError> {
         let key_path = Path::new(&self.key_file_name);
 
@@ -83,7 +87,8 @@ impl CertificateRequest {
     ///    certificate.
     /// 2. Load the CSR from disk and ensure that our private key matches the CSR request public
     ///    key.
-    ///
+    /// #Errors
+    /// Will pass through `CcErrors`on CSR errors.
     pub fn ensure_csr(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let csr_path = Path::new(&self.csr_file_name);
@@ -141,7 +146,7 @@ impl CertificateRequest {
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
             if cert_data == temp_crt {
-                info!("Nothing to do, certificate {:?} unchanged", crt_path);
+                info!("Nothing to do, CA certificate {:?} unchanged", crt_path);
                 return Ok(());
             }
         }
@@ -158,6 +163,7 @@ impl CertificateRequest {
     }
 }
 
+/// Create CSR
 fn certificate_request(
     server: &str,
     client_id: &str,
