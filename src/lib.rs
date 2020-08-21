@@ -47,6 +47,9 @@ pub enum CcError {
     #[error("Unknown error happened in transfer")]
     Network,
 
+    #[error("Server rejected our POST with reason: `{0}`")]
+    NetworkPost(String),
+
     #[error("The certificate was not found.")]
     NotFound,
 
