@@ -19,6 +19,13 @@ const DESIRED_RSA_BITS: u32 = 2048;
 /// Minimum RSA key length accepted
 pub const MIN_RSA_BITS: u32 = 2048;
 
+enum VerifyCertResult {
+    Ok,
+    CertKeyMismatch,
+    CertSignatureInvalid,
+    CertCommonNameMismatch,
+}
+
 /// Use openssl to verify CA certificate.
 /// # Errors
 /// Will return openssl `ErrorStack` if certificate cannot be loaded or is malformed.
@@ -65,7 +72,6 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
         Err(_e) => return Err(CcError::PrivateKeyParseFailure),
     };
     if pkey.bits() < MIN_RSA_BITS {
-        // return Err("Private key is too short".to_owned());
         return Err(CcError::PrivateKeyTooShort {
             actual: pkey.bits(),
         });
@@ -322,23 +328,34 @@ pub fn verify_csr(
 // Use openssl to verify the CA certificate.
 /// # Errors
 /// Will return openssl `ErrorStack` if either input is invalid.
-pub fn openssl_verify_cert(
+fn openssl_verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<bool, ErrorStack> {
+) -> Result<VerifyCertResult, ErrorStack> {
     let private_key = PKey::private_key_from_pem(&private_key_data)?;
     let ca_cert = X509::from_pem(&ca_cert_data)?;
     let cert = X509::from_pem(&cert_data)?;
 
-    let subject = cert.subject_name();
-    let ca_pubkey = ca_cert.public_key()?;
-    let ok_name = check_commoname_match(subject, client_id)?;
-    let ok_signature = cert.verify(&ca_pubkey)?;
     let cert_pubkey = cert.public_key()?;
     let ok_key = private_key.public_eq(&cert_pubkey);
-    Ok(ok_name && ok_signature && ok_key)
+    if !ok_key {
+        return Ok(VerifyCertResult::CertKeyMismatch);
+    }
+
+    let ca_pubkey = ca_cert.public_key()?;
+    let ok_signature = cert.verify(&ca_pubkey)?;
+    if !ok_signature {
+        return Ok(VerifyCertResult::CertSignatureInvalid);
+    }
+
+    let subject = cert.subject_name();
+    let ok_name = check_commoname_match(subject, client_id)?;
+    if !ok_name {
+        return Ok(VerifyCertResult::CertCommonNameMismatch);
+    }
+    Ok(VerifyCertResult::Ok)
 }
 
 /// Verify that the CA certificate we downloaded matches what we want checks:
@@ -346,22 +363,24 @@ pub fn openssl_verify_cert(
 ///     subject/ Common name in cert matches our client id
 ///     Cert signature was signed by our expected CA cert
 /// # Errors
-/// Will return `String` if CA certificate does not match or cannot be valided.
+/// Will return `CcError` if CA certificate does not match or cannot be valided.
 pub fn verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<(), String> {
+) -> Result<(), CcError> {
     /*
      * openssl verify -CAfile ca_cert_file_name, temp_cert_file_name
      */
     match openssl_verify_cert(cert_data, ca_cert_data, private_key_data, client_id) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err("CA certificates loaded but do not match".to_owned()),
+        Ok(VerifyCertResult::Ok) => Ok(()),
+        Ok(VerifyCertResult::CertKeyMismatch) => Err(CcError::CertKeyMismatch),
+        Ok(VerifyCertResult::CertSignatureInvalid) => Err(CcError::CertSignatureInvalid),
+        Ok(VerifyCertResult::CertCommonNameMismatch) => Err(CcError::CertCommonNameMismatch),
         Err(e) => {
             error!("Error verifying CA certificate: {}", e);
-            Err("Unable to validate CA certificate".to_owned())
+            Err(CcError::CertValidationFailure)
         }
     }
 }

@@ -25,6 +25,18 @@ pub enum CcError {
     #[error("Unable to parse CA cert")]
     CaCertParseFailure,
 
+    #[error("Certificate does not match private key")]
+    CertKeyMismatch,
+
+    #[error("Certificate signature is not valid")]
+    CertSignatureInvalid,
+
+    #[error("Certificate CommonName does not match client id")]
+    CertCommonNameMismatch,
+
+    #[error("Unable to validate certificate")]
+    CertValidationFailure,
+
     #[error("Error while building new CSR Subject")]
     CsrBuildSubjectFailure,
 
