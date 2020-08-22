@@ -26,7 +26,7 @@ impl From<curl::Error> for CcError {
 
 /// Enumeration reflecting the current state of this CSR
 ///
-/// Pending: data has been posted to the server, but there is no signed cert to fetch
+/// Pending: data has been posted to the server, but there is no signed certificate to fetch
 /// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them
 /// Downloaded: We got a certificate from the server that can be used.
 pub enum CertState {
@@ -44,7 +44,7 @@ struct CurlReply {
 /// Inner function that uses the curl api enr errors for `fetch_root_cert`
 /// `url` is a complete url
 /// `content` is where the resulting data will be saved
-/// Result is a status code and the same  `content` that got passed in
+/// Result is a status code and the same `content` that got passed in
 ///
 /// Errors:
 /// passes all curl errors through.
@@ -86,11 +86,11 @@ fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl:
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     // 1. Connect to server
     // 2. Verify that TLS checks are _enabled_
-    // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) cert for this
+    // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) certificate for this
     //    server.
     // 4. Download the cert, return it
     let url = format!("https://{}/root.crt", server);
-    info!("Attempting to fetch CA cert from {}", url);
+    info!("Attempting to fetch CA certificate from {}", url);
 
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this
@@ -105,12 +105,14 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
 }
 
 /// Creates a curl handle, attempting connections to the server using both public PKI keys and if
-/// that fails, the local  `ca_cert ` from the path.
+/// that fails, the local  `ca_cert` from the path.
 /// Returns either a handle, or the last connection error from curl
+/// # Errors
+/// Passes all `curl::Error` through.
 fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
-    // If that _fails_ because fex. SSL certificate failure, we add the ca_cert to the SSL
+    // If that _fails_ because fex. SSL certificate failure, we add the `ca_cert` to the SSL
     // connection path, and try again.
     // If that succeeds, we return success.
     // Otherwise, fail hard as we cannot continue
@@ -376,7 +378,7 @@ pub fn post_and_get_crt(
                 debug!("Sleeping for: {:?}", delay);
                 sleep(delay);
             }
-            // Cert not found? Attempt to upload it.
+            // Certificate not found? Attempt to upload it.
             Ok(CertState::NotFound) => {
                 info!("CSR not found on server, posting.");
                 let post_res = curl_post_csr(&mut handle, &url, csr_data)?;

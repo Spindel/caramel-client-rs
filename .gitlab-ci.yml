@@ -95,4 +95,4 @@ rebase:clippy:
     - rustup component add clippy
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo clippy -- -W clippy::pedantic -W clippy::cargo'
+      -x 'cargo clippy -- -D clippy::pedantic -D clippy::cargo'
