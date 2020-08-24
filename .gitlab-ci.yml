@@ -24,7 +24,7 @@ crosscompile:
     # Build
     - cargo build --target x86_64-unknown-linux-gnu
     - cargo build --target armv7-unknown-linux-gnueabihf
-
+    - cargo doc --no-deps -p caramel-client
 
 
 # This builds the "client" container that others can use to run the application.
@@ -121,6 +121,28 @@ rebase:clippy:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
       -x 'cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo'
+
+rebase:doc:
+  <<: *rebase
+  script:
+    - git rebase --rebase-merges --autosquash origin/master
+      -x 'git --no-pager log --oneline --max-count=1'
+      -x 'cargo doc --no-deps -p caramel-client'
+
+
+# This is to publish the documentation to external site
+# https://modioab.gitlab.io/caramel-client-rs/
+pages:
+  stage: deploy
+  #only:
+  #  - master
+  script:
+    - cargo doc --no-deps -p caramel-client
+    - rm -rf public
+    - mv target/doc/ public
+  artifacts:
+    paths:
+      - public
 
 
 # This build the "build" container
