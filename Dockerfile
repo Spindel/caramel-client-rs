@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2020 Modio AB
+
 FROM rust:buster AS build
 
 # To make sure we build & link against the same libraries, we install openssl and curl headers.

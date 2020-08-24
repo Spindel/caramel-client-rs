@@ -32,7 +32,7 @@ release:container:
   rules:
     # Build when any of these files change
     - changes:
-      - Dockefile
+      - Dockerfile
       - Makefile
       - build.mk
     # Always build on tags
@@ -105,7 +105,7 @@ container:build:
   rules:
     # Build when any of these files change
     - changes:
-      - Dockefile.build
+      - Dockerfile.build
       - Makefile.build
       - build.mk
     # Always build from scheduled builds
