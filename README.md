@@ -5,7 +5,7 @@ Rust Caramel client and Library
 ## What is it
 
 Caramel is a simple Certificate Authority (CA) that lets users set up their own
-root CA, sign clients & servers, and thereby identify machines to machinse
+root CA, sign clients & servers, and thereby identify machines to machines
 using TLS (Transport Layer Security) with Client Certificate Authentication.
 
 This is a _client_ that communicates against a [Caramel Server](https://github.com/ModioAB/caramel/).
@@ -16,7 +16,6 @@ It is responsible for:
 2. Creating CSR (Certificate Sign Requests)
 3. Posting said CSR to the Caramel Server
 4. Fetching signed certificates from the Caramel Server
-
 
 ## Why use it
 
@@ -32,6 +31,76 @@ Common use-cases for us are:
 - Deploying Keys & Certificates for Monitoring services (Zabbix)
 - Web-application to API authentication
 
+## Getting Started
+
+### Installation
+
+To run Caramel Client Rust project you need to have the following packages installed:
+
+ - rustup
+ - rustc
+ - cargo
+ - pkg-config
+ - clippy
+ - fmt
+
+Information on how to install rust and cargo can be found on [rust-lang.org](https://www.rust-lang.org/learn/get-started).
+Follow thereafter [rust-lang/rust-clippy](https://github.com/rust-lang/rust-clippy) and
+[rust-lang/rustfmt](https://github.com/rust-lang/rustfmt) to install clippy and fmt.
+
+### Build and test project
+
+Here comes a list of useful cargo commands which will help you when contributing to the Caramel Client Rust project.
+
+| Command | Description |
+|---------|-------------|
+| cargo build  | Build all binary and library targets (crates). The resulting crate can be found in `caramel-client-rs/target/debug/` under the name `caramel-client-rs`. |
+| cargo run  | Build and run all crates. |
+| cargo check  | Compiles the code without generating crates. This makes it faster than `cargo build`. |
+| <nobr>cargo test -- --nocapture </nobr>| Run all unit tests and get output from stdout and stderr during execution. |
+| <nobr> cargo test \<FILE\>::test::\<FUNCTION\> </nobr> | Run a single unit tests. `<FILE>` is the file name and `<FUNCTION>` is the name of the test function. |
+| <nobr>cargo clippy</nobr> | A collection of lints which helps you correct logical mistakes in your code.  |
+| cargo fmt  | Formats the code so that it follows Rust's [style guide](https://github.com/rust-dev-tools/fmt-rfcs/blob/master/guide/guide.md). |
+<br>
+
+A step by step guide on how to use cargo can be found in the [cargo book](https://doc.rust-lang.org/cargo/index.html).
+
+### Checks run in CI pipeline
+
+The following checks are run by the CI pipeline:
+
+ - cargo test
+ - cargo check
+ - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
+ - cargo fmt
+
+You can use the alias below to rebase your changes ontop remote master.
+The alias is similar to what is used by the CI pipeline.
+
+    # git config alias.every "rebase -x 'git --no-pager log --oneline --max-count=1' --rebase-merges --autosquash origin/master"
+
+The alias can be used as:
+
+    # git checkout <COMMIT>
+    # git every -x 'cargo check'
+
+where `<COMMIT>` is the commit with your changes.
+
+Check the [.gitlab-ci.yml](https://gitlab.com/ModioAB/caramel-client-rs/-/blob/master/.gitlab-ci.yml) file for more details.
+
+### Visual Studio Code setup
+
+To developers that are using Visual Studio Code we recommend the following plugins:
+
+ - [Rust](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust):
+  Adds language support for rust. Includes code completion, jumping between sections, formating, etc.
+ - [Docker](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-docker):
+  Simplifies woring with Docker containers. Allows creating, managing and debugging
+  containers inside Visual Studio Code.
+
+If you want to use Visual Studio Code on WSL we also recommend that you install the
+[Remote - WSL](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl) plugin
+which enables you to access files in the Linux environment in VS Code.
 
 ## License
 
