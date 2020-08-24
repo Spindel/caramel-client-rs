@@ -349,7 +349,7 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
 /// Tries to ensure we can get a certificate
 /// 1. A get attempt is made to the server, if succesful, early exit
 /// 2. If not found, POST it to the server
-/// 3. If POST was succesful, iterate loop times:
+/// 3. If POST was succesful, iterate forever:
 /// 4   Attempt to download and return the certificate
 /// 5. If all attempts fail (no signed certificate exists) error out
 ///
@@ -360,7 +360,6 @@ pub fn post_and_get_crt(
     server: &str,
     ca_cert: &Path,
     csr_data: &[u8],
-    loops: usize,
 ) -> Result<CertState, CcError> {
     use std::thread::sleep;
 
@@ -372,9 +371,6 @@ pub fn post_and_get_crt(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        if attempt > loops {
-            break Ok(CertState::Pending);
-        }
         let get_res = curl_get_crt(&mut handle, &url)?;
         match inner_get_crt(&url, get_res) {
             // Pending, We sleep for a bit and try again
