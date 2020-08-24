@@ -55,8 +55,4 @@ pub enum CcError {
 
     #[error("The CA certificate was not found.")]
     CaNotFound,
-
-    // Cludge to make other parts of the code return CcError instead of String
-    #[error("***ERROR*** WrappedString is no good!!!: {0}")]
-    WrappedString(String),
 }
