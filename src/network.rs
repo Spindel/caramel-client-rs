@@ -369,7 +369,12 @@ pub fn post_and_get_crt(
 
     let mut handle = curl_get_handle(&server, &ca_cert)?;
 
-    for attempt in 0..loops {
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        if attempt > loops {
+            break Ok(CertState::Pending);
+        }
         let get_res = curl_get_crt(&mut handle, &url)?;
         match inner_get_crt(&url, get_res) {
             // Pending, We sleep for a bit and try again
@@ -385,11 +390,10 @@ pub fn post_and_get_crt(
                 let _discard_post_status = inner_post_csr(&url, &post_res)?;
             }
             // all other Ok states ( Rejected, Downloaded, etc..  are passed out of this function
-            Ok(c) => return Ok(c),
-            Err(e) => return Err(e),
+            Ok(c) => break Ok(c),
+            Err(e) => break Err(e),
         }
     }
-    Ok(CertState::Pending)
 }
 
 #[cfg(test)]
