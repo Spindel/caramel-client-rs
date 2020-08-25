@@ -171,7 +171,7 @@ fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> 
         let mut transfer = handle.transfer();
         transfer.write_function(|from_server| {
             data.extend_from_slice(from_server);
-            Ok(data.len())
+            Ok(from_server.len())
         })?;
 
         transfer.perform()?;
@@ -261,7 +261,7 @@ fn curl_post_csr(
 
         transfer.write_function(|from_server| {
             data.extend_from_slice(from_server);
-            Ok(data.len())
+            Ok(from_server.len())
         })?;
 
         transfer.perform()?;
