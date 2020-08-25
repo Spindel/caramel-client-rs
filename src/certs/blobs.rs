@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
-// This module should only be used in the test configuration
+//! This module should only be used in the test configuration.
 #[cfg(test)]
 pub mod testdata {
     #[must_use]

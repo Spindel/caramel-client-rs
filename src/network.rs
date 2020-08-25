@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+
+//! Network handling API for a Caramel Client.
+
+
 mod hexsum;
 
 use curl::easy::Easy;
@@ -25,10 +29,10 @@ impl From<curl::Error> for CcError {
     }
 }
 
-/// Enumeration reflecting the current state of this CSR
+/// Enumeration reflecting the current state of this CSR.
 ///
-/// Pending: data has been posted to the server, but there is no signed certificate to fetch
-/// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them
+/// Pending: data has been posted to the server, but there is no signed certificate to fetch.
+/// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them.
 /// Downloaded: We got a certificate from the server that can be used.
 #[derive(Debug, PartialEq)]
 pub enum CertState {
@@ -38,18 +42,19 @@ pub enum CertState {
     Downloaded(Vec<u8>),
 }
 
+// Struct for Curl replies.
 struct CurlReply {
     status_code: u32,
     data: Vec<u8>,
 }
 
-/// Inner function that uses the curl api enr errors for `fetch_root_cert`
-/// `url` is a complete url
-/// `content` is where the resulting data will be saved
-/// Result is a status code and the same `content` that got passed in
+/// Inner function that uses the curl api enr errors for `fetch_root_cert`.
+/// * `url` is a complete url.
+/// * `content` is where the resulting data will be saved.
+/// Result is a status code and the same `content` that got passed in.
 ///
-/// Errors:
-/// passes all curl errors through.
+/// # Errors
+/// * Passes all `curl::Error` through.
 fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl::Error> {
     let mut handle = Easy::new();
     handle.url(&url)?;
@@ -80,18 +85,19 @@ fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl:
 }
 
 /// Fetch the root certificate if we do not have it already.
-/// Will fail if the server is not valid against our default CA-store
+/// Will fail if the server is not valid against our default CA-store.
+///
 /// # Errors
-///    `CcError::Network` for most HTTP status-codes that we do not know what to do with
-///    `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
-///    `CcError::CANotFound` Means that this server has no CA file.
+/// * `CcError::Network` for most HTTP status-codes that we do not know what to do with.
+/// * `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
+/// * `CcError::CANotFound` Means that this server has no CA file.
 ///                        It's probably not running caramel.
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
-    // 1. Connect to server
-    // 2. Verify that TLS checks are _enabled_
+    // 1. Connect to server.
+    // 2. Verify that TLS checks are _enabled_.
     // 3. Fail if not using _public_ (ie, LetsEncrypt or other public PKI infra) certificate for this
     //    server.
-    // 4. Download the cert, return it
+    // 4. Download the cert, return it.
     let url = format!("https://{}/root.crt", server);
     debug!("Fetching CA certificate from '{}'", server);
 
@@ -109,17 +115,17 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
 
 /// Creates a curl handle, attempting connections to the server using both public PKI keys and if
 /// that fails, the local  `ca_cert` from the path.
-/// Returns either a handle, or the last connection error from curl
+/// Returns either a handle, or the last connection error from curl.
+///
 /// # Errors
-/// Passes all `curl::Error` through.
+/// * Passes all `curl::Error` through.
 fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     // First we start by getting https://{server}/
     // Then, if that succeeds, we are done and return the handle
     // If that _fails_ because fex. SSL certificate failure, we add the `ca_cert` to the SSL
     // connection path, and try again.
     // If that succeeds, we return success.
-    // Otherwise, fail hard as we cannot continue
-    //
+    // Otherwise, fail hard as we cannot continue.
     let url = format!("https://{}/", server);
     let mut handle = Easy::new();
     handle.ssl_verify_host(true)?;
@@ -154,13 +160,13 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     }
 }
 
-/// Internal function that downloads the certificate
-/// Using `handle`  and assumes that our setup is complete.
+/// Internal function that downloads the certificate.
+/// Using `handle` and assumes that our setup is complete.
 ///
 /// Result is the status code and a vector of data.
 ///
-/// Errors:
-/// returns all curl errors
+/// # Errors
+/// * Passes all `curl::Error` through.
 fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> {
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this.
@@ -187,6 +193,10 @@ fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> 
 
 /// Internal function that is responsible for consuming `CurlReply` (Status code and data) into
 /// useful error statuses, log lines and other data we may require.
+///
+/// # Errors
+/// * `CcError::Rejected` when CSR was rejected by server.
+/// * `CcError::Network`  when failed to fetch from server.
 fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
     match res.status_code {
         200 => Ok(CertState::Downloaded(res.data)),
@@ -210,19 +220,19 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
 }
 
 /// Get crt _only_ attempts to fetch the certificate, and only attempts to do so once.
-/// 1. Get the required connection information (tls, curl handle, etc)
+/// 1. Get the required connection information (tls, curl handle, etc).
 /// 2. Calculate sha256sum of our csr to post to the server.
 /// 3. Attempt to download a fresh certificate and return it.
+///
 /// # Ok
-///    `CertState::NotFound`   Means that you need to POST this CSR first.
-///    `CertState::Downloaded`  Contains the fresh certificate
-///    `CertState::Pending`     Means we need to wait for unknown time for the server to sign our CSR
-///    `CertState::Rejected`     The server has rejected our CSR, and we may need to re-generate both our Key and CSR.
+/// * `CertState::NotFound`   Means that you need to POST this CSR first.
+/// * `CertState::Downloaded` Contains the fresh certificate.
+/// * `CertState::Pending`    Means we need to wait for unknown time for the server to sign our CSR.
+/// * `CertState::Rejected`   The server has rejected our CSR, and we may need to re-generate both our Key and CSR.
 ///
 /// # Errors
-///    `CcError::Network` for most HTTP status-codes that we do not know what to do with
-///    `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
-///
+/// * `CcError::Network` for most HTTP status-codes that we do not know what to do with.
+/// * `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.).
 #[allow(dead_code)]
 pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
@@ -233,12 +243,11 @@ pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertStat
     inner_get_crt(&url, get_res)
 }
 
-/// Internal function that posts a CSR to the url
+/// Internal function that posts a CSR to the url.
+/// Returns status code `CurlReply`.
 ///
-/// Returns status code
-///
-/// Errors:
-/// returns all curl errors
+/// # Errors
+/// * Passes all `curl::Error` through.
 fn curl_post_csr(
     handle: &mut Easy,
     url: &str,
@@ -280,8 +289,8 @@ fn curl_post_csr(
 /// It is responsible for decoding status codes and messages into useful Error and Result states.
 ///
 /// # Errors
-/// `CcError::NetworkPost`  - Error during Post, with reason
-/// `CcError::Network`      - Unknown Network Error
+/// * `CcError::NetworkPost`  for error during Post, with reason.
+/// * `CcError::Network`      for unknown Network Error.
 fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
     // The server will return HTTP Bad Request in the following _known_ situations:
     // 1. POST of CSR to an URL that does not match the CSR.
@@ -313,11 +322,11 @@ fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
 }
 
 /// Assuming that a certificate file does not exist on the `server`, post `csr_data` to a name
-/// calculated by the contents of `csr_data`
+/// calculated by the contents of `csr_data`.
 ///
 /// # Errors
-///   `CcError::LibCurl` for various curl internal errors ( dns, timeout, typoed hostname, etc)
-///   `CcError::Network` for various status codes from the CA server.
+/// * `CcError::LibCurl` for various curl internal errors (dns, timeout, typoed hostname, etc).
+/// * `CcError::Network` for various status codes from the CA server.
 #[allow(dead_code)]
 pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
@@ -356,16 +365,16 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
     bounded_delay.mul_f64(1.0 + 0.3 * (between_0_and_1 - 0.5))
 }
 
-/// Tries to ensure we can get a certificate
-/// 1. A get attempt is made to the server, if succesful, early exit
-/// 2. If not found, POST it to the server
-/// 3. If POST was succesful, iterate forever:
-/// 4   Attempt to download and return the certificate
-/// 5. If all attempts fail (no signed certificate exists) error out
+/// Tries to ensure we can get a certificate.
+/// 1. A get attempt is made to the server, if succesful, early exit.
+/// 2. If not found, POST it to the server.
+/// 3. If POST was succesful, iterate forever.
+/// 4  Attempt to download and return the certificate.
+/// 5. If all attempts fail (no signed certificate exists) error out.
 ///
 /// # Errors
-///   `CcError::LibCurl` for various curl internal errors ( dns, timeout, typoed hostname, etc)
-///   `CcError::Network` for various status codes from the CA server.
+/// * `CcError::LibCurl` for various curl internal errors (dns, timeout, typoed hostname, etc).
+/// * `CcError::Network` for various status codes from the CA server.
 pub fn post_and_get_crt(
     server: &str,
     ca_cert: &Path,
@@ -556,8 +565,7 @@ mod tests {
     }
 }
 
-/// Tests that run against "live" data. These tests may randomly fail due to network services being
-/// down.
+/// Tests that run against "live" data. These tests may randomly fail due to network services being down.
 #[cfg(test)]
 mod integration {
     use super::{fetch_root_cert, get_crt, CcError, CertState, Path};

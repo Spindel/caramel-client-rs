@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+
+//! A crate for implementing a Caramel Client library API in Rust.
+//!
+//! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
+
+
 pub mod certs;
 pub mod network;
 
 #[derive(thiserror::Error, Debug, PartialEq)]
+/// Enum `CcError` used for library error replies.
 pub enum CcError {
     // certs.rs errors
     #[error("Unable to parse private key")]
@@ -70,4 +77,8 @@ pub enum CcError {
 
     #[error("The CA certificate was not found")]
     CaNotFound,
+
+    // Cludge to make other parts of the code return CcError instead of String.
+    #[error("***ERROR*** WrappedString is no good!!!: {0}")]
+    WrappedString(String),
 }

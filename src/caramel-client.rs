@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+
+//! Implementation of a Caramel client in Rust.
+//!
+//! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
+
+
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
@@ -10,6 +16,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
+/// Struct for `CertificateRequest`.
 struct CertificateRequest {
     server: String,
     client_id: String,
@@ -34,8 +41,9 @@ impl CertificateRequest {
 
     /// If no CA certificate exists, download it and save to disk.
     /// Will always verify the CA certificate according to some basic parsing rules.
-    /// #Errors
-    /// Will pass through `CcErrors`on CA certificate errors.
+    ///
+    /// # Errors
+    /// * `CcErrors`on CA certificate errors.
     pub fn ensure_cacert(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
 
@@ -67,9 +75,10 @@ impl CertificateRequest {
 
     /// Ensure that a local key exists in our key filename.
     /// 1. If no private key exists, create one and save to disk.
-    /// 2. Verify existing key file can be loaded and passes our validation
-    /// #Errors
-    /// Will pass through `CcErrors`on private key errors.
+    /// 2. Verify existing key file can be loaded and passes our validation.
+    ///
+    /// # Errors
+    /// * `CcErrors`on private key errors.
     pub fn ensure_key(&self) -> Result<(), CcError> {
         let key_path = Path::new(&self.key_file_name);
 
@@ -95,8 +104,9 @@ impl CertificateRequest {
     ///    certificate.
     /// 2. Load the CSR from disk and ensure that our private key matches the CSR request public
     ///    key.
-    /// #Errors
-    /// Will pass through `CcErrors`on CSR errors.
+    ///
+    /// # Errors
+    /// * `CcErrors`on CSR errors.
     pub fn ensure_csr(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let csr_path = Path::new(&self.csr_file_name);
@@ -131,6 +141,9 @@ impl CertificateRequest {
     /// 4. Downloads a certificate if we have one
     /// 5. Validates that the downloaded certificate matches our CSR and our Private Key
     /// 6. Stores the result on disk.
+    ///
+    /// # Errors
+    /// * `String` on errors.
     pub fn ensure_crt(&self) -> Result<(), String> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let crt_path = Path::new(&self.crt_file_name);
@@ -184,7 +197,10 @@ impl CertificateRequest {
     }
 }
 
-/// Create CSR
+/// Send a Certificate Request to server.
+///
+/// # Errors
+/// * `Error` if certificate request fails.
 fn certificate_request(
     server: &str,
     client_id: &str,
@@ -204,9 +220,10 @@ fn certificate_request(
     Ok("Received certificate".into())
 }
 
-/// Parse the commandline, returning `server` and `client_id`
-/// Alternatively, an error message in an Err
+/// Parse the command line, returning `server` and `client_id`.
 ///
+/// # Errors
+/// * `String` if fails to parse the command line.
 fn read_cmd_input() -> Result<(String, String), String> {
     let mut args: Vec<String> = std::env::args().collect();
 
@@ -224,6 +241,10 @@ fn read_cmd_input() -> Result<(String, String), String> {
     }
 }
 
+/// `main` function of the caramel-client-rs.
+///
+/// # Errors
+/// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_level(log::Level::Debug).unwrap();
     let (server, client_id) = read_cmd_input()?;
