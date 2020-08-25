@@ -46,6 +46,9 @@ pub enum CcError {
     #[error("CSR (certificat signing request) not signed by our private key CSR")]
     CsrSignedWithWrongKey,
 
+    #[error("CSR (certificat signing request) CommonName does not match client id")]
+    CsrCommonNameMismatch,
+
     #[error("Unable to validate CSR (certificat signing request)")]
     CsrValidationFailure,
 

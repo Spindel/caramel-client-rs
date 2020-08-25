@@ -283,17 +283,31 @@ fn check_commoname_match(subject: &x509::X509NameRef, client_id: &str) -> Result
     Ok(true)
 }
 
+enum VerifyCsrResult {
+    Ok,
+    CsrDoesNotMatchPrivateKey,
+    CommonNameMismatch,
+}
+
 fn openssl_verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<bool, ErrorStack> {
+) -> Result<VerifyCsrResult, ErrorStack> {
     let pkey = PKey::private_key_from_pem(&private_key_data)?;
     let csr = X509Req::from_pem(&csr_data)?;
     let verified = csr.verify(&pkey)?;
+    if !verified {
+        return Ok(VerifyCsrResult::CsrDoesNotMatchPrivateKey);
+    }
+
     let subject = csr.subject_name();
     let matching_name = check_commoname_match(subject, client_id)?;
-    Ok(verified && matching_name)
+    if !matching_name {
+        return Ok(VerifyCsrResult::CommonNameMismatch);
+    }
+
+    Ok(VerifyCsrResult::Ok)
 }
 
 /// Verify that the Certificate Sign Request is valid according to our rules.
@@ -305,6 +319,7 @@ fn openssl_verify_csr(
 ///
 /// Will return `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.
 /// Will return `CcError::CsrValidationFailure` if CSR cannot be parsed.
+/// Will return `CcError::CsrCommonNameMismatch` if CommonName in CSR does not match client_id.
 pub fn verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
@@ -316,8 +331,9 @@ pub fn verify_csr(
 
     let valid = openssl_verify_csr(csr_data, private_key_data, client_id);
     match valid {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(CcError::CsrSignedWithWrongKey),
+        Ok(VerifyCsrResult::Ok) => Ok(()),
+        Ok(VerifyCsrResult::CsrDoesNotMatchPrivateKey) => Err(CcError::CsrSignedWithWrongKey),
+        Ok(VerifyCsrResult::CommonNameMismatch) => Err(CcError::CsrCommonNameMismatch),
         Err(e) => {
             error!("Error parsing CSR: {}", e);
             Err(CcError::CsrValidationFailure)
@@ -563,9 +579,19 @@ mod tests {
         let result = verify_csr(&csr, &key, &client_id);
 
         match result {
-            Err(CcError::CsrSignedWithWrongKey) => assert!(true),
-            Ok(_) => assert!(false, "Should not be ok with different key"),
-            Err(_) => assert!(false, "Should not generate different errors"),
+            Err(e) => assert_eq!(CcError::CsrSignedWithWrongKey, e),
+            Ok(_) => panic!("Should not be ok with different key"),
+        }
+    }
+
+    #[test]
+    fn test_verify_csr_failure_when_clientid_differs() {
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+        let result = verify_csr(&csr, &key, &OTHER_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CsrCommonNameMismatch, e),
+            Ok(_) => panic!("Should not be ok with client id mismatch"),
         }
     }
 
