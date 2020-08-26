@@ -169,6 +169,7 @@ fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> 
     // not, and then we can once more use it after the block scope.
     {
         let mut transfer = handle.transfer();
+        // See https://docs.rs/curl/0.4.33/curl/easy/struct.Easy.html#method.write_function
         transfer.write_function(|from_server| {
             data.extend_from_slice(from_server);
             Ok(from_server.len())
@@ -259,6 +260,7 @@ fn curl_post_csr(
             Ok(len)
         })?;
 
+        // See https://docs.rs/curl/0.4.33/curl/easy/struct.Easy.html#method.write_function
         transfer.write_function(|from_server| {
             data.extend_from_slice(from_server);
             Ok(from_server.len())
