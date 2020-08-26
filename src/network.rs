@@ -131,7 +131,7 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     info!("Probing: '{}' using default TLS settings", &server);
     match handle.perform() {
         Ok(_) => return Ok(handle),
-        Err(e) => info!("Failed to connect with default TLS settings. \n{}", e),
+        Err(e) => info!("Failed to connect with default TLS settings.\n {}", e),
     };
     // Force a re-connect on the next run
     handle.fresh_connect(true)?;
@@ -145,7 +145,7 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
         Ok(_) => Ok(handle),
         Err(e) => {
             error!(
-                "Failed to connect to '{}' with {:?} as CA certificate. \n{}",
+                "Failed to connect to server '{}' with {:?} as CA certificate.\n {}",
                 &server, ca_cert, e
             );
             Err(e)
@@ -193,14 +193,14 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
         404 => Ok(CertState::NotFound),
         403 => {
             info!(
-                "Rejected CSR from server when fetching '{}': \n {:?}",
+                "Rejected CSR from server when fetching '{}':\n {:?}",
                 url, res.data
             );
             Ok(CertState::Rejected)
         }
         _ => {
             error!(
-                "Error from server when fetching '{}': \n {:?}",
+                "Error from server when fetching '{}':\n {:?}",
                 url, res.data
             );
             Err(CcError::Network)
@@ -385,12 +385,12 @@ pub fn post_and_get_crt(
             // Pending, We sleep for a bit and try again
             Ok(CertState::Pending) => {
                 let delay = calculate_backoff(attempt);
-                debug!("Sleeping for: {:?}", delay);
+                info!("Request pending. Sleeping for: {:?}", delay);
                 sleep(delay);
             }
             // Certificate not found? Attempt to upload it.
             Ok(CertState::NotFound) => {
-                info!("CSR not found on server, posting.");
+                info!("CSR not found on server, posting to server: '{}'", &server);
                 let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
                 let _discard_post_status = inner_post_csr(&url, &post_res)?;
             }

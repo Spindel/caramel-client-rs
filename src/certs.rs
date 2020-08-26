@@ -2,7 +2,7 @@
 // Copyright 2020 Modio AB
 
 use crate::CcError;
-use log::{debug, error, info};
+use log::{debug, error};
 use openssl::error::ErrorStack;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -31,7 +31,7 @@ enum VerifyCertResult {
 /// Will return openssl `ErrorStack` if certificate cannot be loaded or is malformed.
 fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
     let ca_cert = X509::from_pem(&ca_cert_data)?;
-    info!("Try to verify CA certificate: {:?}", ca_cert);
+    debug!("Use openssl to verify CA certificate: {:?}", ca_cert);
     let pkey = ca_cert.public_key()?;
     let res = ca_cert.verify(&pkey)?;
     Ok(res)
@@ -46,6 +46,8 @@ pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
     /*
        openssl  verify  -CAfile  filename, filename
     */
+    debug!("Verify CA certificate");
+
     match openssl_verify_cacert(ca_cert_data) {
         Ok(true) => Ok(()),
         Ok(false) => Err(CcError::CaCertNotSelfSigned),
@@ -80,6 +82,7 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
 }
 
 fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
+    debug!("Create private key size: {} bits", size);
     let rsa = Rsa::generate(size)?;
     let pkey = PKey::from_rsa(rsa)?;
     let pem = pkey.private_key_to_pem_pkcs8()?;
@@ -90,6 +93,7 @@ fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
 /// # Errors
 /// Will return `CcError::PrivateKeyCreationFailure` if a private RSA key cannot be created.
 pub fn create_private_key() -> Result<Vec<u8>, CcError> {
+    debug!("Create RSA private key");
     match openssl_create_private_key(DESIRED_RSA_BITS) {
         Ok(c) => Ok(c),
         Err(e) => {
