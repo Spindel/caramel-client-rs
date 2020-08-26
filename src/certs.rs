@@ -492,9 +492,11 @@ pub fn create_csr(
 mod tests {
     use super::*;
     use crate::certs::blobs::testdata::{
-        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CACERT_DATA1,
-        VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
+        convert_string_to_vec8, OTHER_CLIENT_ID1, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1,
+        VALID_CACERT_DATA1, VALID_CLIENT_ID1, VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1,
+        VALID_KEY_DATA2, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
     };
+
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
@@ -599,5 +601,44 @@ mod tests {
         let csr = result.unwrap();
         let csr_text = std::str::from_utf8(&csr).unwrap();
         assert_eq!(csr_text, WORKAROUND_CSR_DATA1);
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_key() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let other_key = convert_string_to_vec8(VALID_KEY_DATA2);
+
+        let result = verify_cert(&cert, &ca_cert, &other_key, &VALID_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertKeyMismatch, e),
+            Ok(_) => panic!("Should not be ok with key mismatch"),
+        }
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_client_id() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+
+        let result = verify_cert(&cert, &ca_cert, &key, &OTHER_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertCommonNameMismatch, e),
+            Ok(_) => panic!("Should not be ok with client id mismatch"),
+        }
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_signing_cert() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let other_ca_cert = convert_string_to_vec8(WORKAROUND_CACERT);
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+
+        let result = verify_cert(&cert, &other_ca_cert, &key, &VALID_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertSignatureInvalid, e),
+            Ok(_) => panic!("Should not be ok with key mismatch"),
+        }
     }
 }
