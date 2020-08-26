@@ -43,6 +43,8 @@ release:container:
       when: on_success
     # Allow users to _manually_ build this from merge-requests
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
+      allow_failure: true
       when: manual
     # Do not build on other conditions
     - when: never
@@ -59,6 +61,7 @@ release:x86_64:
       when: on_success
     # Permit binary builds from merge-requests
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
       allow_failure: true
       when: manual
     # Do not build on other conditions
@@ -133,6 +136,8 @@ container:build:
       when: on_success
     # Allow users to _manually_ build this from merge-requests in cases.
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
+      allow_failure: true
       when: manual
     # Do not build on other conditions
     - when: never
