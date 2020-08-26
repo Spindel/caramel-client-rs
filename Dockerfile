@@ -1,33 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2020 Modio AB
 
-FROM rust
+FROM rust:buster AS build
 
-ENV LANG  C.utf8
-ENV LANGUAGE C.utf8
-ENV LC_ALL C.utf8
+# To make sure we build & link against the same libraries, we install openssl and curl headers.
+RUN apt-get update \
+    && apt-get install -y libcurl4-openssl-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR '/data'
-# First try call init to make a trivial program, add our Cargo.toml to download all dependencies
-# to create a cache of everything we need before adding our actual sourcecode
-RUN USER=rust cargo init --name caramel-client-rs && \
-    mv src/main.rs src/caramel-client.rs
-COPY Cargo.toml .
-RUN cargo update && \
-    cargo generate-lockfile && \
-    cargo fetch && \
-    cargo build && \
-    cargo install --path .
+WORKDIR /data
+COPY . /data
+RUN cargo build --release
 
-# Now copy everything (source code) and build the application
-COPY . .
-RUN cargo build && cargo install --path .
-RUN cargo run -- --help ||:
+FROM debian:buster
 
-CMD ["cargo run"]
+ARG URL=unknown
+ARG COMMIT=unknown
+ARG BRANCH=unknown
+ARG HOST=unknown
+ARG DATE=unknown
+LABEL "se.modio.ci.url"=$URL  "se.modio.ci.branch"=$BRANCH  "se.modio.ci.commit"=$COMMIT  "se.modio.ci.host"=$HOST  "se.modio.ci.date"=$DATE
 
-# Build container with:             docker build -t caramel-client-rs .
+# To run, we currently need:
+#    ca-certificates ( public PKI root)
+#    libssl (openssl)
+#    libcurl (curl)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libcurl4 libssl1.1 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# For development map code and run with bash:
-# docker run -it -v `pwd`/.:/data caramel-client-rs bash
-# In the container to run code: cargo run
+COPY --from=build /data/target/release/caramel-client-rs /usr/bin/caramel-client-rs
+
+WORKDIR /data
+ENTRYPOINT ["/usr/bin/caramel-client-rs"]
