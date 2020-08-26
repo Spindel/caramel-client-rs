@@ -119,7 +119,7 @@ rebase:clippy:
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo clippy -- -D clippy::pedantic -D clippy::cargo'
+      -x 'cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo'
 
 
 # This build the "build" container
