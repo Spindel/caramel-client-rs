@@ -29,6 +29,7 @@ impl From<curl::Error> for CcError {
 /// Pending: data has been posted to the server, but there is no signed certificate to fetch
 /// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them
 /// Downloaded: We got a certificate from the server that can be used.
+#[derive(Debug, PartialEq)]
 pub enum CertState {
     Pending,
     Rejected,
@@ -399,6 +400,11 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    #[must_use]
+    pub fn convert_string_to_vec8(text: &str) -> Vec<u8> {
+        text.as_bytes().to_vec()
+    }
+
     #[test]
     fn test_backoff() {
         const BIG_DUR: Duration = Duration::from_secs(60);
@@ -435,30 +441,22 @@ mod tests {
         let reply = make_reply(200, "");
 
         let res = inner_post_csr("", &reply);
-        if let Ok(CertState::Pending) = res {
-            assert!(true);
-        } else {
-            assert!(false);
-        }
+        assert_eq!(Some(CertState::Pending), res.ok());
     }
     #[test]
     fn test_post_csr_202_not_modified() {
         let reply = make_reply(202, "");
 
         let res = inner_post_csr("", &reply);
-        if let Ok(CertState::Pending) = res {
-            assert!(true);
-        } else {
-            assert!(false);
-        }
+        assert_eq!(Some(CertState::Pending), res.ok());
     }
 
     #[test]
     fn test_post_csr_error_missing_header() {
         let reply = make_reply(411, "Length required");
-        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
-        } else {
-            assert!(false, "We should get a Post error");
+        match inner_post_csr("", &reply) {
+            Err(CcError::NetworkPost(_)) => (),
+            _ => panic!("We should get a Post error"),
         }
     }
 
@@ -466,9 +464,9 @@ mod tests {
     fn test_post_csr_error_too_large() {
         let reply = make_reply(413, "Too large 100kb > 12kb");
 
-        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
-        } else {
-            assert!(false, "We should get a Post error");
+        match inner_post_csr("", &reply) {
+            Err(CcError::NetworkPost(_)) => (),
+            _ => panic!("We should get a Post error"),
         }
     }
 
@@ -476,72 +474,58 @@ mod tests {
     fn test_post_csr_error() {
         let err_msg = r#"{"status":400,"title":"Bad Request","detail":"Bad subject: (('ST', '\u00d6sterg\u00f6tland'),) do not match (('O', 'ModioAB'),)"}"#;
         let reply = make_reply(400, err_msg);
-        if let Err(CcError::NetworkPost(_)) = inner_post_csr("", &reply) {
-            assert!(true);
-        } else {
-            assert!(false, "We should get a Post error");
+        match inner_post_csr("", &reply) {
+            Err(CcError::NetworkPost(_)) => (),
+            _ => panic!("We should get a Post error"),
         }
     }
 
     #[test]
     fn test_post_csr_unknown() {
-        let reply = make_reply(500, "Cannot connect to database");
-
-        if let Err(CcError::Network) = inner_post_csr("", &reply) {
-            assert!(true);
-        } else {
-            assert!(false, "We should get a Post error");
-        }
+        let message = "Cannot connect to database";
+        let reply = make_reply(500, message);
+        let res = inner_post_csr("", &reply);
+        assert_eq!(Some(CcError::Network), res.err());
     }
 
     #[test]
     fn test_get_crt_ok() {
         let reply = make_reply(200, "");
-
-        if let Ok(CertState::Downloaded(_)) = inner_get_crt("", reply) {
-            assert!(true);
-        } else {
-            assert!(false, "We should have a a data reploy");
-        }
+        let res = inner_get_crt("", reply);
+        assert_eq!(
+            Some(CertState::Downloaded(convert_string_to_vec8(""))),
+            res.ok()
+        );
     }
 
     #[test]
     fn test_get_crt_pending() {
         let reply = make_reply(202, "XXXXXXXXXXX");
-        if let Ok(CertState::Pending) = inner_get_crt("", reply) {
-            assert!(true);
-        } else {
-            assert!(false, "Should get an OK / Pending on 202");
-        }
+        let res = inner_get_crt("", reply);
+        // Should get an OK / Pending on 202
+        assert_eq!(Some(CertState::Pending), res.ok());
     }
     #[test]
     fn test_get_crt_rejected() {
         let reply = make_reply(403, "Forbidden");
-        if let Ok(CertState::Rejected) = inner_get_crt("", reply) {
-            assert!(true);
-        } else {
-            assert!(false, "Should get an OK / Rejected on status 403");
-        }
+        let res = inner_get_crt("", reply);
+        // Should get an OK / Rejected on status 403
+        assert_eq!(Some(CertState::Rejected), res.ok());
     }
 
     #[test]
     fn test_get_crt_not_posted() {
         let reply = make_reply(404, "Not found");
-        if let Ok(CertState::NotFound) = inner_get_crt("", reply) {
-            assert!(true);
-        } else {
-            assert!(false, "Should get an OK + NotFound on 404");
-        }
+        let res = inner_get_crt("", reply);
+        // Should get an OK /  NotFound on 404
+        assert_eq!(Some(CertState::NotFound), res.ok());
     }
     #[test]
     fn test_get_crt_error() {
         let reply = make_reply(500, "Cannot connect to database");
-
-        if let Err(CcError::Network) = inner_get_crt("", reply) {
-            assert!(true);
-        } else {
-            assert!(false, "We should get a misc error");
-        }
+        let res = inner_get_crt("", reply);
+        // We should get a misc error
+        assert_eq!(Some(CcError::Network), res.err());
     }
 }
 
@@ -562,10 +546,12 @@ mod integration {
     fn get_cacert_from_ca_modio() {
         // ca.modio.se runs on a self-signed PKI
         let res = fetch_root_cert("ca.modio.se");
-        match res {
-            Ok(_) => assert!(false, "Should not succeed due to being signed by others"),
-            Err(CcError::CaNotFound) => assert!(false, "Should not get 404 from this server."),
-            Err(_) => assert!(true, "Correct, should be a TLS connection error."),
+        if res.is_ok() {
+            panic!("Should not succeed due to being signed by others");
+        } else if res.err() == Some(CcError::CaNotFound) {
+            panic!("Should not get 404 from this server.");
+        } else {
+            println!("Correct, should be a TLS connection error.");
         }
     }
 
@@ -573,9 +559,10 @@ mod integration {
     fn get_cacert_from_www_modio() {
         // www.modio.se does not run a caramel server.
         let res = fetch_root_cert("www.modio.se");
-        match res {
-            Err(CcError::CaNotFound) => assert!(true, "Should 404 from a web server"),
-            _ => assert!(false, "Wrong return from www.modio.se"),
+        if res.err() == Some(CcError::CaNotFound) {
+            println!("Should 404 from a web server");
+        } else {
+            panic!("Wrong return from www.modio.se");
         }
     }
 
@@ -607,8 +594,8 @@ aq69O+gq+AO+jX+8xQHnSIp6pxocIxaufeSaXCgVysM=
             fffbeec0ffee_csr.as_bytes(),
         );
         match res {
-            Ok(CertState::Downloaded(_)) => assert!(true, "Is a valid csr, should have valid crt"),
-            _ => assert!(false, "Failure for unknown reason"),
+            Ok(CertState::Downloaded(_)) => println!("Is a valid csr, should have valid crt"),
+            _ => panic!("Failure for unknown reason"),
         }
     }
 }
