@@ -4,6 +4,7 @@
 // This module should only be used in the test configuration
 #[cfg(test)]
 pub mod testdata {
+    #[must_use]
     pub fn convert_string_to_vec8(text: &str) -> Vec<u8> {
         text.as_bytes().to_vec()
     }
