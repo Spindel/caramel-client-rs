@@ -1,0 +1,63 @@
+
+[package]
+name = "caramel-client-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = { version = "0.3" }
+arbitrary = { version = "", features=["derive"]}
+
+[dependencies.caramel-client]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "create_csr"
+path = "fuzz_targets/create_csr.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "verify_private_key"
+path = "fuzz_targets/verify_private_key.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "verify_cacert"
+path = "fuzz_targets/verify_cacert.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "verify_cert"
+path = "fuzz_targets/verify_cert.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "verify_cert_2"
+path = "fuzz_targets/verify_cert_2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "create_csr_2"
+path = "fuzz_targets/create_csr_2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "network_post_reply"
+path = "fuzz_targets/network_post_reply.rs"
+test = false
+doc = false
