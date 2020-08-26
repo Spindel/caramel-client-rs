@@ -4,7 +4,7 @@
 # We use a slightly modified `rust:buster` image
 # See Dockerfile.build for details on what this image does differently compared
 # to upstream `rust:buster` container
-image: registry.gitlab.com/modioab/caramel-client-rs/build:ci-fixes
+image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
 # Use cargo to test the project
 test:cargo:
