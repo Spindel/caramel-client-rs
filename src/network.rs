@@ -419,7 +419,7 @@ mod tests {
         assert!(thousand >= one);
 
         // number is larger than u32, make sure wrap logic works
-        let bignum = calculate_backoff(8589934592);
+        let bignum = calculate_backoff(8_589_934_592);
         assert!(bignum < BIG_DUR);
         assert!(bignum > SMALL_DUR);
         assert!(bignum >= thousand);
