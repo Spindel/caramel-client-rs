@@ -319,7 +319,7 @@ fn openssl_verify_csr(
 ///
 /// Will return `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.
 /// Will return `CcError::CsrValidationFailure` if CSR cannot be parsed.
-/// Will return `CcError::CsrCommonNameMismatch` if CommonName in CSR does not match client_id.
+/// Will return `CcError::CsrCommonNameMismatch` if `CommonName` in CSR does not match `client_id`.
 pub fn verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
