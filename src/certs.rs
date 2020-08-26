@@ -563,20 +563,18 @@ mod tests {
 
     #[test]
     fn test_verify_csr_happy() {
-        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
 
-        let result = verify_csr(&csr, &key, &client_id);
+        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_verify_csr_failure() {
-        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
         let key = create_private_key().unwrap();
-        let result = verify_csr(&csr, &key, &client_id);
+        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
 
         match result {
             Err(e) => assert_eq!(CcError::CsrSignedWithWrongKey, e),
@@ -602,11 +600,7 @@ mod tests {
         let ca_sommar_modio_se = convert_string_to_vec8(VALID_CACERT_DATA1);
         let expected = convert_string_to_vec8(VALID_CSR_DATA1);
 
-        let result = create_csr(
-            &ca_sommar_modio_se,
-            &valid_key,
-            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
-        );
+        let result = create_csr(&ca_sommar_modio_se, &valid_key, VALID_CLIENT_ID1);
         assert!(result.is_ok());
         let csr = result.unwrap();
         assert_eq!(csr, expected);
@@ -618,11 +612,7 @@ mod tests {
         let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
         let ca_modio_se = convert_string_to_vec8(WORKAROUND_CACERT);
 
-        let result = create_csr(
-            &ca_modio_se,
-            &valid_key,
-            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
-        );
+        let result = create_csr(&ca_modio_se, &valid_key, VALID_CLIENT_ID1);
         assert!(result.is_ok());
         let csr = result.unwrap();
         let csr_text = std::str::from_utf8(&csr).unwrap();
