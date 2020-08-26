@@ -133,13 +133,14 @@ rebase:doc:
 # This is to publish the documentation to external site
 # https://modioab.gitlab.io/caramel-client-rs/
 pages:
-  stage: deploy
+  #stage: deploy
   #only:
   #  - master
   script:
     - cargo doc --no-deps -p caramel-client
     - rm -rf public
     - mv target/doc/ public
+    - ls -l public
   artifacts:
     paths:
       - public
