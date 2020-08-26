@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
-
 //! Network handling API for a Caramel Client.
-
 
 mod hexsum;
 

@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
-
 //! Implementation of a Caramel client in Rust.
 //!
 //! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
-
 
 use caramel_client::certs;
 use caramel_client::network;
