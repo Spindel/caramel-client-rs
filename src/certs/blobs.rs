@@ -197,12 +197,13 @@ wZxKcLyO4BjEsK7m7iVhhtBsHWp8/3+dSCb3eAIORw==
 ";
 
     pub const RANDOM_DATA_KEY_DATA1: &str = "-----BEGIN RSA PRIVATE KEY-----
-Hemsöborna är en roman från 1887 av August Strindberg. Den utgavs ett år efter Tjänstekvinnans son.
-Strindberg gjorde även en dramaversion av berättelsen 1889.
-Romanen skrevs under Strindbergs vistelse i Schweiz och södra Tyskland.
+Hems\u{f6}borna \u{e4}r en roman fr\u{e5}n 1887 av August Strindberg.
+Den utgavs ett \u{e5}r efter Tj\u{e4}nstekvinnans son.
+Strindberg gjorde \u{e4}ven en dramaversion av ber\u{e4}ttelsen 1889.
+Romanen skrevs under Strindbergs vistelse i Schweiz och s\u{f6}dra Tyskland.
 
-De inledande raderna är en så kallad in medias res-fras:
-*Han kom som ett yrväder en aprilafton och hade ett höganäskrus i en svångrem om halsen.*
+De inledande raderna \u{e4}r en s\u{e5} kallad in medias res-fras:
+*Han kom som ett yrv\u{e4}der en aprilafton och hade ett h\u{f6}gan\u{e4}skrus i en sv\u{e5}ngrem om halsen.*
 -----END RSA PRIVATE KEY-----
 ";
 
