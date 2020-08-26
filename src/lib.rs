@@ -25,6 +25,18 @@ pub enum CcError {
     #[error("Unable to parse CA cert")]
     CaCertParseFailure,
 
+    #[error("Certificate does not match private key")]
+    CertKeyMismatch,
+
+    #[error("Certificate signature is not valid")]
+    CertSignatureInvalid,
+
+    #[error("Certificate CommonName does not match client id")]
+    CertCommonNameMismatch,
+
+    #[error("Unable to validate certificate")]
+    CertValidationFailure,
+
     #[error("Error while building new CSR Subject")]
     CsrBuildSubjectFailure,
 
@@ -33,6 +45,9 @@ pub enum CcError {
 
     #[error("CSR (certificat signing request) not signed by our private key CSR")]
     CsrSignedWithWrongKey,
+
+    #[error("CSR (certificat signing request) CommonName does not match client id")]
+    CsrCommonNameMismatch,
 
     #[error("Unable to validate CSR (certificat signing request)")]
     CsrValidationFailure,
@@ -55,8 +70,4 @@ pub enum CcError {
 
     #[error("The CA certificate was not found.")]
     CaNotFound,
-
-    // Cludge to make other parts of the code return CcError instead of String
-    #[error("***ERROR*** WrappedString is no good!!!: {0}")]
-    WrappedString(String),
 }

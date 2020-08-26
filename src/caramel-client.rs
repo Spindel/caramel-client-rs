@@ -45,10 +45,8 @@ impl CertificateRequest {
                 self.ca_cert_file_name
             );
 
-            let ca_data = match network::fetch_root_cert(&self.server) {
-                Ok(data) => data,
-                Err(e) => return Err(CcError::WrappedString(format!("{}", e))),
-            };
+            let ca_data = network::fetch_root_cert(&self.server)?;
+
             // Open the file for writing with "Create new" option, which causes a failure if this file
             // already exists.
             // We only perform this _after_ we have downloaded the certificate, to make sure we do not

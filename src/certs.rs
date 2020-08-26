@@ -19,6 +19,13 @@ const DESIRED_RSA_BITS: u32 = 2048;
 /// Minimum RSA key length accepted
 pub const MIN_RSA_BITS: u32 = 2048;
 
+enum VerifyCertResult {
+    Ok,
+    CertKeyMismatch,
+    CertSignatureInvalid,
+    CertCommonNameMismatch,
+}
+
 /// Use openssl to verify CA certificate.
 /// # Errors
 /// Will return openssl `ErrorStack` if certificate cannot be loaded or is malformed.
@@ -65,7 +72,6 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
         Err(_e) => return Err(CcError::PrivateKeyParseFailure),
     };
     if pkey.bits() < MIN_RSA_BITS {
-        // return Err("Private key is too short".to_owned());
         return Err(CcError::PrivateKeyTooShort {
             actual: pkey.bits(),
         });
@@ -277,17 +283,31 @@ fn check_commoname_match(subject: &x509::X509NameRef, client_id: &str) -> Result
     Ok(true)
 }
 
+enum VerifyCsrResult {
+    Ok,
+    CsrDoesNotMatchPrivateKey,
+    CommonNameMismatch,
+}
+
 fn openssl_verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<bool, ErrorStack> {
+) -> Result<VerifyCsrResult, ErrorStack> {
     let pkey = PKey::private_key_from_pem(&private_key_data)?;
     let csr = X509Req::from_pem(&csr_data)?;
     let verified = csr.verify(&pkey)?;
+    if !verified {
+        return Ok(VerifyCsrResult::CsrDoesNotMatchPrivateKey);
+    }
+
     let subject = csr.subject_name();
     let matching_name = check_commoname_match(subject, client_id)?;
-    Ok(verified && matching_name)
+    if !matching_name {
+        return Ok(VerifyCsrResult::CommonNameMismatch);
+    }
+
+    Ok(VerifyCsrResult::Ok)
 }
 
 /// Verify that the Certificate Sign Request is valid according to our rules.
@@ -299,6 +319,7 @@ fn openssl_verify_csr(
 ///
 /// Will return `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.
 /// Will return `CcError::CsrValidationFailure` if CSR cannot be parsed.
+/// Will return `CcError::CsrCommonNameMismatch` if CommonName in CSR does not match client_id.
 pub fn verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
@@ -310,8 +331,9 @@ pub fn verify_csr(
 
     let valid = openssl_verify_csr(csr_data, private_key_data, client_id);
     match valid {
-        Ok(true) => Ok(()),
-        Ok(false) => Err(CcError::CsrSignedWithWrongKey),
+        Ok(VerifyCsrResult::Ok) => Ok(()),
+        Ok(VerifyCsrResult::CsrDoesNotMatchPrivateKey) => Err(CcError::CsrSignedWithWrongKey),
+        Ok(VerifyCsrResult::CommonNameMismatch) => Err(CcError::CsrCommonNameMismatch),
         Err(e) => {
             error!("Error parsing CSR: {}", e);
             Err(CcError::CsrValidationFailure)
@@ -322,23 +344,34 @@ pub fn verify_csr(
 // Use openssl to verify the CA certificate.
 /// # Errors
 /// Will return openssl `ErrorStack` if either input is invalid.
-pub fn openssl_verify_cert(
+fn openssl_verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<bool, ErrorStack> {
+) -> Result<VerifyCertResult, ErrorStack> {
     let private_key = PKey::private_key_from_pem(&private_key_data)?;
     let ca_cert = X509::from_pem(&ca_cert_data)?;
     let cert = X509::from_pem(&cert_data)?;
 
-    let subject = cert.subject_name();
-    let ca_pubkey = ca_cert.public_key()?;
-    let ok_name = check_commoname_match(subject, client_id)?;
-    let ok_signature = cert.verify(&ca_pubkey)?;
     let cert_pubkey = cert.public_key()?;
     let ok_key = private_key.public_eq(&cert_pubkey);
-    Ok(ok_name && ok_signature && ok_key)
+    if !ok_key {
+        return Ok(VerifyCertResult::CertKeyMismatch);
+    }
+
+    let ca_pubkey = ca_cert.public_key()?;
+    let ok_signature = cert.verify(&ca_pubkey)?;
+    if !ok_signature {
+        return Ok(VerifyCertResult::CertSignatureInvalid);
+    }
+
+    let subject = cert.subject_name();
+    let ok_name = check_commoname_match(subject, client_id)?;
+    if !ok_name {
+        return Ok(VerifyCertResult::CertCommonNameMismatch);
+    }
+    Ok(VerifyCertResult::Ok)
 }
 
 /// Verify that the CA certificate we downloaded matches what we want checks:
@@ -346,22 +379,24 @@ pub fn openssl_verify_cert(
 ///     subject/ Common name in cert matches our client id
 ///     Cert signature was signed by our expected CA cert
 /// # Errors
-/// Will return `String` if CA certificate does not match or cannot be valided.
+/// Will return `CcError` if CA certificate does not match or cannot be valided.
 pub fn verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
     private_key_data: &[u8],
     client_id: &str,
-) -> Result<(), String> {
+) -> Result<(), CcError> {
     /*
      * openssl verify -CAfile ca_cert_file_name, temp_cert_file_name
      */
     match openssl_verify_cert(cert_data, ca_cert_data, private_key_data, client_id) {
-        Ok(true) => Ok(()),
-        Ok(false) => Err("CA certificates loaded but do not match".to_owned()),
+        Ok(VerifyCertResult::Ok) => Ok(()),
+        Ok(VerifyCertResult::CertKeyMismatch) => Err(CcError::CertKeyMismatch),
+        Ok(VerifyCertResult::CertSignatureInvalid) => Err(CcError::CertSignatureInvalid),
+        Ok(VerifyCertResult::CertCommonNameMismatch) => Err(CcError::CertCommonNameMismatch),
         Err(e) => {
             error!("Error verifying CA certificate: {}", e);
-            Err("Unable to validate CA certificate".to_owned())
+            Err(CcError::CertValidationFailure)
         }
     }
 }
@@ -473,9 +508,11 @@ pub fn create_csr(
 mod tests {
     use super::*;
     use crate::certs::blobs::testdata::{
-        convert_string_to_vec8, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1, VALID_CACERT_DATA1,
-        VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
+        convert_string_to_vec8, OTHER_CLIENT_ID1, RANDOM_DATA_KEY_DATA1, TOO_SMALL_KEY_DATA1,
+        VALID_CACERT_DATA1, VALID_CLIENT_ID1, VALID_CRT_DATA1, VALID_CSR_DATA1, VALID_KEY_DATA1,
+        VALID_KEY_DATA2, WORKAROUND_CACERT, WORKAROUND_CSR_DATA1,
     };
+
     #[test]
     fn test_fail_on_key_with_to_few_bits() {
         let key_with_too_few_bits = convert_string_to_vec8(TOO_SMALL_KEY_DATA1);
@@ -526,25 +563,33 @@ mod tests {
 
     #[test]
     fn test_verify_csr_happy() {
-        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
 
-        let result = verify_csr(&csr, &key, &client_id);
+        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_verify_csr_failure() {
-        let client_id = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
         let key = create_private_key().unwrap();
-        let result = verify_csr(&csr, &key, &client_id);
+        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
 
         match result {
-            Err(CcError::CsrSignedWithWrongKey) => assert!(true),
-            Ok(_) => assert!(false, "Should not be ok with different key"),
-            Err(_) => assert!(false, "Should not generate different errors"),
+            Err(e) => assert_eq!(CcError::CsrSignedWithWrongKey, e),
+            Ok(_) => panic!("Should not be ok with different key"),
+        }
+    }
+
+    #[test]
+    fn test_verify_csr_failure_when_clientid_differs() {
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+        let csr = convert_string_to_vec8(VALID_CSR_DATA1);
+        let result = verify_csr(&csr, &key, &OTHER_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CsrCommonNameMismatch, e),
+            Ok(_) => panic!("Should not be ok with client id mismatch"),
         }
     }
 
@@ -555,11 +600,7 @@ mod tests {
         let ca_sommar_modio_se = convert_string_to_vec8(VALID_CACERT_DATA1);
         let expected = convert_string_to_vec8(VALID_CSR_DATA1);
 
-        let result = create_csr(
-            &ca_sommar_modio_se,
-            &valid_key,
-            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
-        );
+        let result = create_csr(&ca_sommar_modio_se, &valid_key, VALID_CLIENT_ID1);
         assert!(result.is_ok());
         let csr = result.unwrap();
         assert_eq!(csr, expected);
@@ -571,14 +612,49 @@ mod tests {
         let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
         let ca_modio_se = convert_string_to_vec8(WORKAROUND_CACERT);
 
-        let result = create_csr(
-            &ca_modio_se,
-            &valid_key,
-            "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d",
-        );
+        let result = create_csr(&ca_modio_se, &valid_key, VALID_CLIENT_ID1);
         assert!(result.is_ok());
         let csr = result.unwrap();
         let csr_text = std::str::from_utf8(&csr).unwrap();
         assert_eq!(csr_text, WORKAROUND_CSR_DATA1);
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_key() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let other_key = convert_string_to_vec8(VALID_KEY_DATA2);
+
+        let result = verify_cert(&cert, &ca_cert, &other_key, &VALID_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertKeyMismatch, e),
+            Ok(_) => panic!("Should not be ok with key mismatch"),
+        }
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_client_id() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+
+        let result = verify_cert(&cert, &ca_cert, &key, &OTHER_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertCommonNameMismatch, e),
+            Ok(_) => panic!("Should not be ok with client id mismatch"),
+        }
+    }
+
+    #[test]
+    fn test_verify_cert_fails_on_mismatch_signing_cert() {
+        let cert = convert_string_to_vec8(VALID_CRT_DATA1);
+        let other_ca_cert = convert_string_to_vec8(WORKAROUND_CACERT);
+        let key = convert_string_to_vec8(VALID_KEY_DATA1);
+
+        let result = verify_cert(&cert, &other_ca_cert, &key, &VALID_CLIENT_ID1);
+        match result {
+            Err(e) => assert_eq!(CcError::CertSignatureInvalid, e),
+            Ok(_) => panic!("Should not be ok with key mismatch"),
+        }
     }
 }
