@@ -118,10 +118,7 @@ impl CertificateRequest {
         let key_path = Path::new(&self.key_file_name);
 
         let csr_data = std::fs::read(&csr_path).unwrap();
-        // 25 loops will be approximately 5 minutes
-        let loops_from_commandline = 25;
-        let res =
-            network::post_and_get_crt(&self.server, &ca_path, &csr_data, loops_from_commandline);
+        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data);
 
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
