@@ -549,7 +549,8 @@ mod tests {
 /// down.
 #[cfg(test)]
 mod integration {
-    use super::*;
+    use super::{fetch_root_cert, get_crt, CcError, CertState, Path};
+
     #[test]
     fn get_cacert_from_log_ca() {
         // ca.log.modio.se runs on a publicly signed PKI
