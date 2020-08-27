@@ -133,7 +133,7 @@ rebase:doc:
 # This is to publish the documentation to external site
 # https://modioab.gitlab.io/caramel-client-rs/
 pages:
-  #stage: deploy
+  stage: deploy
   #only:
   #  - master
   script:
