@@ -75,6 +75,7 @@ fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl:
         transfer.perform()?;
     }
     let status_code = handle.response_code()?;
+    debug!("GET {}, status={}", url, status_code);
     Ok(CurlReply { status_code, data })
 }
 
@@ -92,7 +93,7 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     //    server.
     // 4. Download the cert, return it
     let url = format!("https://{}/root.crt", server);
-    info!("Attempting to fetch CA certificate from {}", url);
+    debug!("Fetching certificate from '{}'", server);
 
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this
@@ -128,10 +129,10 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
         curl::easy::SslVersion::Tlsv13,
     )?;
     handle.url(&url)?;
-    info!("Probing: '{}' using default TLS settings", &server);
+    debug!("Probing: '{}' using default TLS settings", &server);
     match handle.perform() {
         Ok(_) => return Ok(handle),
-        Err(e) => info!("Failed to connect with default TLS settings.\n {}", e),
+        Err(e) => error!("Failed to connect with default TLS settings.\n {}", e),
     };
     // Force a re-connect on the next run
     handle.fresh_connect(true)?;
@@ -226,7 +227,7 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
 pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
-    info!("Attempting to download certificate from: {}", url);
+    info!("Fetching certificate from '{}'", server);
     let mut handle = curl_get_handle(&server, &ca_cert)?;
     let get_res = curl_get_crt(&mut handle, &url)?;
     inner_get_crt(&url, get_res)
@@ -324,7 +325,7 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
 
     let mut handle = curl_get_handle(&server, &ca_cert)?;
 
-    info!("About to post CSR to: {}", url);
+    info!("Posting CSR to '{}'", server);
     let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
     inner_post_csr(&url, &post_res)
 }
