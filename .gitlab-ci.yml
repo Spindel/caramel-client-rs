@@ -140,6 +140,7 @@ pages:
     - cargo doc --no-deps -p caramel-client
     - rm -rf public
     - mv target/doc/ public
+    - echo '<meta http-equiv="refresh" content="0; url=caramel_client">' > public/index.html
     - ls -l public
   artifacts:
     paths:
