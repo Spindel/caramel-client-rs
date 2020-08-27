@@ -12,9 +12,10 @@ test:cargo:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
 
-
-
-
+lint:
+  script:
+    - cargo fmt -- --check
+    - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
 
 crosscompile:
   script:
