@@ -31,7 +31,7 @@ enum VerifyCertResult {
 /// Will return openssl `ErrorStack` if certificate cannot be loaded or is malformed.
 fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
     let ca_cert = X509::from_pem(&ca_cert_data)?;
-    trace!("Use openssl to verify CA certificate: {:?}", ca_cert);
+    trace!(target:"openssl", "Use openssl to verify CA certificate: {:?}", ca_cert);
     let pkey = ca_cert.public_key()?;
     let res = ca_cert.verify(&pkey)?;
     Ok(res)
@@ -52,7 +52,7 @@ pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
         Ok(true) => Ok(()),
         Ok(false) => Err(CcError::CaCertNotSelfSigned),
         Err(e) => {
-            error!("openssl_verify_cacert failed, underlying error: {:?}", e);
+            error!(target:"openssl", "openssl_verify_cacert failed, underlying error: {:?}", e);
             Err(CcError::CaCertParseFailure)
         }
     }
@@ -82,7 +82,7 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
 }
 
 fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
-    trace!("Use openssl to create private key size: {} bits", size);
+    trace!(target:"openssl", "Use openssl to create private key size: {} bits", size);
     let rsa = Rsa::generate(size)?;
     let pkey = PKey::from_rsa(rsa)?;
     let pem = pkey.private_key_to_pem_pkcs8()?;
@@ -266,9 +266,9 @@ fn openssl_make_subject(ca_cert_data: &[u8], client_id: &str) -> Result<X509Name
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
     let subj = get_ca_subject(&ca_cert_data)?;
-    trace!("Got ca subject '{:?}'", subj.as_ref());
+    trace!(target:"openssl", "Got ca subject '{:?}'", subj.as_ref());
     let new_subject = make_inner_subject(&subj, client_id)?;
-    debug!("Created new subject '{:?}'", new_subject.as_ref());
+    debug!(target:"openssl", "Created new subject '{:?}'", new_subject.as_ref());
     Ok(new_subject)
 }
 
@@ -303,7 +303,7 @@ fn openssl_verify_csr(
 ) -> Result<VerifyCsrResult, ErrorStack> {
     let pkey = PKey::private_key_from_pem(&private_key_data)?;
     let csr = X509Req::from_pem(&csr_data)?;
-    trace!("Verifying CSR against private key");
+    trace!(target:"openssl", "Verifying CSR against private key");
     let verified = csr.verify(&pkey)?;
     if !verified {
         return Ok(VerifyCsrResult::CsrDoesNotMatchPrivateKey);
@@ -363,7 +363,7 @@ fn openssl_verify_cert(
     let cert = X509::from_pem(&cert_data)?;
 
     let cert_pubkey = cert.public_key()?;
-    trace!(
+    trace!(target:"openssl", 
         "Verifying certificate pubkey '{:?}' against private key",
         &cert_pubkey
     );
@@ -373,7 +373,7 @@ fn openssl_verify_cert(
     }
 
     let ca_pubkey = ca_cert.public_key()?;
-    trace!(
+    trace!(target:"openssl", 
         "Verifying Certificate '{:?}' against CA public key: '{:?}'",
         &cert_data,
         &ca_pubkey
@@ -412,7 +412,7 @@ pub fn verify_cert(
         Ok(VerifyCertResult::CertSignatureInvalid) => Err(CcError::CertSignatureInvalid),
         Ok(VerifyCertResult::CertCommonNameMismatch) => Err(CcError::CertCommonNameMismatch),
         Err(e) => {
-            error!("Error verifying CA certificate: {}", e);
+            error!(target:"openssl", "Error verifying CA certificate: {}", e);
             Err(CcError::CertValidationFailure)
         }
     }
