@@ -16,11 +16,19 @@ Fuzz jobs (today) only work in nightly mode of rust.
 List all jobs:
 
     # cargo +nightly fuzz list
+
     create_csr
     private_key
     verify_cacert
     verify_cert
     verify_cert_2
+
+
+
+At 2020-08-27, running the fuzz targets required a nightly toolchain to be
+installed, if you haven't already installed a nightly toolchain,
+
+    # rustup toolchain install nightly
 
 Run jobs:
 
