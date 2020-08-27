@@ -36,9 +36,9 @@ pub enum CertState {
     Downloaded(Vec<u8>),
 }
 
-struct CurlReply {
-    status_code: u32,
-    data: Vec<u8>,
+pub struct CurlReply {
+    pub status_code: u32,
+    pub data: Vec<u8>,
 }
 
 /// Inner function that uses the curl api enr errors for `fetch_root_cert`
@@ -184,7 +184,7 @@ fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> 
 
 /// Internal function that is responsible for consuming `CurlReply` (Status code and data) into
 /// useful error statuses, log lines and other data we may require.
-fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
+pub fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
     match res.status_code {
         200 => Ok(CertState::Downloaded(res.data)),
         202 | 304 => Ok(CertState::Pending),
@@ -279,7 +279,7 @@ fn curl_post_csr(
 /// # Errors
 /// `CcError::NetworkPost`  - Error during Post, with reason
 /// `CcError::Network`      - Unknown Network Error
-fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
+pub fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
     // The server will return HTTP Bad Request in the following _known_ situations:
     // 1. POST of CSR to an URL that does not match the CSR.
     //    Ie, if the sha256 and the data do not match.
