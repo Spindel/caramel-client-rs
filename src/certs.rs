@@ -363,7 +363,7 @@ fn openssl_verify_cert(
     let cert = X509::from_pem(&cert_data)?;
 
     let cert_pubkey = cert.public_key()?;
-    trace!(target:"openssl", 
+    trace!(target:"openssl",
         "Verifying certificate pubkey '{:?}' against private key",
         &cert_pubkey
     );
@@ -373,7 +373,7 @@ fn openssl_verify_cert(
     }
 
     let ca_pubkey = ca_cert.public_key()?;
-    trace!(target:"openssl", 
+    trace!(target:"openssl",
         "Verifying Certificate '{:?}' against CA public key: '{:?}'",
         &cert_data,
         &ca_pubkey
