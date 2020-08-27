@@ -386,12 +386,12 @@ pub fn post_and_get_crt(
             // Pending, We sleep for a bit and try again
             Ok(CertState::Pending) => {
                 let delay = calculate_backoff(attempt);
-                info!("Request pending. Sleeping for: {:?}", delay);
+                info!("Request pending. Sleeping for {:?}", delay);
                 sleep(delay);
             }
             // Certificate not found? Attempt to upload it.
             Ok(CertState::NotFound) => {
-                info!("CSR not found on server, posting to server: '{}'", &server);
+                info!("CSR not found on server, posting to server '{}'", &server);
                 let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
                 let _discard_post_status = inner_post_csr(&url, &post_res)?;
             }
