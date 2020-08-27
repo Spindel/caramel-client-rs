@@ -354,6 +354,12 @@ fn openssl_verify_cert(
     let ca_cert = X509::from_pem(&ca_cert_data)?;
     let cert = X509::from_pem(&cert_data)?;
 
+    let subject = cert.subject_name();
+    let ok_name = check_commoname_match(subject, client_id)?;
+    if !ok_name {
+        return Ok(VerifyCertResult::CertCommonNameMismatch);
+    }
+
     let cert_pubkey = cert.public_key()?;
     let ok_key = private_key.public_eq(&cert_pubkey);
     if !ok_key {
@@ -366,11 +372,6 @@ fn openssl_verify_cert(
         return Ok(VerifyCertResult::CertSignatureInvalid);
     }
 
-    let subject = cert.subject_name();
-    let ok_name = check_commoname_match(subject, client_id)?;
-    if !ok_name {
-        return Ok(VerifyCertResult::CertCommonNameMismatch);
-    }
     Ok(VerifyCertResult::Ok)
 }
 
