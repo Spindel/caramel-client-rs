@@ -73,7 +73,12 @@ impl CertificateRequest {
 
         if !key_path.exists() {
             let key_data = certs::create_private_key()?;
-            let mut file = std::fs::File::create(&key_path).unwrap();
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&key_path)
+                .unwrap();
+
             file.write_all(&key_data).unwrap();
         }
         let data = std::fs::read(&key_path).unwrap();
@@ -96,7 +101,11 @@ impl CertificateRequest {
         if !csr_path.exists() {
             let ca_data = std::fs::read(&ca_path).unwrap();
             let csrdata = certs::create_csr(&ca_data, &key_data, &self.client_id)?;
-            let mut file = std::fs::File::create(&csr_path).unwrap();
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&csr_path)
+                .unwrap();
             file.write_all(&csrdata).unwrap();
         }
         let csr_data = std::fs::read(&csr_path).unwrap();
