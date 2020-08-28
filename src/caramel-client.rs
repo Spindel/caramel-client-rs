@@ -4,7 +4,7 @@
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
-use log::{debug, info};
+use log::{debug, error, info};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
@@ -74,10 +74,7 @@ impl CertificateRequest {
         let key_path = Path::new(&self.key_file_name);
 
         if !key_path.exists() {
-            info!(
-                "Private key file: {:?} does not exist, creating",
-                &key_path
-            );
+            info!("Private key file: {:?} does not exist, creating", &key_path);
             let key_data = certs::create_private_key()?;
             let mut file = OpenOptions::new()
                 .write(true)
@@ -142,9 +139,7 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        info!("Sending CSR to server: '{}'", &self.server);
         let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data);
-
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
@@ -155,12 +150,12 @@ impl CertificateRequest {
             Err(e) => panic!("Unknown error. cannot cope: {}", e),
         };
 
-        info!("Verifying certificate received from '{}'", &self.server);
+        debug!("Verifying certificate received from '{}'", &self.server);
         let ca_cert_data = std::fs::read(&ca_path).unwrap();
         let key_data = std::fs::read(&key_path).unwrap();
         let valid = certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id);
         if valid.is_err() {
-            debug!(
+            error!(
                 "Invalid certificate received from '{}'\n {:?}",
                 &self.server, valid
             );
@@ -168,7 +163,6 @@ impl CertificateRequest {
             return Err(err_msg);
         }
 
-        debug!("Verify CRT file: {:?}", &crt_path);
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
             if cert_data == temp_crt {
@@ -178,7 +172,7 @@ impl CertificateRequest {
         }
         // We explicitly open for over-write here as we either have a new file, or are writing a
         // new certificate to the file.
-        debug!("Writing CRT file: {:?}", &crt_path);
+        info!("Writing certificate file: {:?}", &crt_path);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
