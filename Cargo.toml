@@ -14,6 +14,21 @@ categories = ["command-line-utilities", "cryptography", "authentication"]
 description = "A caramel client, to generate keys, requests and fetch updated certificates from a caramel server"
 readme = "README.md"
 
+exclude = [
+# Containers need not be part of package release
+   "build.mk",
+   "Makefile*",
+   "Dockerfile*",
+   ".dockerignore",
+   ".cargo-cross-config",
+# Shell script to check log output should not be part of release
+   "TESTcommands.sh",
+# gitlab data needs not be part of release
+   ".gitlab*",
+# Git data need not be part of release
+   ".gitignore",
+]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
