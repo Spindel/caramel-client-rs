@@ -65,9 +65,9 @@ pub enum CcError {
     #[error("Server rejected our POST with reason: `{0}`")]
     NetworkPost(String),
 
-    #[error("The certificate was not found.")]
+    #[error("The certificate was not found")]
     NotFound,
 
-    #[error("The CA certificate was not found.")]
+    #[error("The CA certificate was not found")]
     CaNotFound,
 }
