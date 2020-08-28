@@ -8,6 +8,7 @@ authors = ["D.S. Ljungmark <ljungmark@modio.se>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://gitlab.com/ModioAB/caramel-client-rs"
+homepage = "https://modioab.gitlab.io/caramel-client-rs/"
 keywords = ["caramel", "csr", "certificate", "tls", "openssl"]
 categories = ["command-line-utilities", "cryptography", "authentication"]
 description = "A caramel client, to generate keys, requests and fetch updated certificates from a caramel server"
