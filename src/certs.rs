@@ -334,7 +334,7 @@ fn openssl_verify_csr(
 }
 
 /// Verify that the Certificate Sign Request is valid according to our rules.
-/// 
+///
 /// 1. The Client ID must match our expected client-id.
 /// 2. The private key must match the Requests public key.
 ///
