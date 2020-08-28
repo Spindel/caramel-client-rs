@@ -20,6 +20,7 @@ readme = "README.md"
 curl = {version = "0.4"}
 log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
+rand = "0.7"
 sha2 = "0.9.1"
 simple_logger = "1.6"
 thiserror = "1.0"
