@@ -62,7 +62,8 @@ pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
 }
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
-/// should probably take a path or similar rather than a string.
+///
+/// TODO should probably take a path or similar rather than a string.
 ///
 /// # Errors
 /// * `CcError::PrivateKeyParseFailure` if passed invalid data that cannot be parsed as a private key.
@@ -333,8 +334,9 @@ fn openssl_verify_csr(
 }
 
 /// Verify that the Certificate Sign Request is valid according to our rules.
-///    The Client ID must match our expected client-id.
-///    The private key must match the Requests public key.
+/// 
+/// 1. The Client ID must match our expected client-id.
+/// 2. The private key must match the Requests public key.
 ///
 /// TODO: Verify that the CSR checks out against the server.
 ///
@@ -406,7 +408,8 @@ fn openssl_verify_cert(
     Ok(VerifyCertResult::Ok)
 }
 
-/// Verify that the CA certificate we downloaded matches what we want checks:
+/// Verify that the CA certificate we downloaded matches what we want checks.
+///
 /// 1. Private key corresponds to public key in the cert.
 /// 2. Subject/ Common name in certificate matches our client id.
 /// 3. Certificate signature was signed by our expected CA certificate.

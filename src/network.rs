@@ -82,7 +82,8 @@ fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl:
     Ok(CurlReply { status_code, data })
 }
 
-/// Fetch the root certificate if we do not have it already.
+/// Fetch the CA certificate from the server.
+///
 /// Will fail if the server is not valid against our default CA-store.
 ///
 /// # Errors
@@ -360,6 +361,7 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
 }
 
 /// Tries to ensure we can get a certificate.
+///
 /// 1. A get attempt is made to the server, if succesful, early exit.
 /// 2. If not found, POST it to the server.
 /// 3. If POST was succesful, iterate forever.

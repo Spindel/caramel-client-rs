@@ -38,6 +38,7 @@ impl CertificateRequest {
     }
 
     /// If no CA certificate exists, download it and save to disk.
+    ///
     /// Will always verify the CA certificate according to some basic parsing rules.
     ///
     /// # Errors
@@ -72,6 +73,7 @@ impl CertificateRequest {
     }
 
     /// Ensure that a local key exists in our key filename.
+    ///
     /// 1. If no private key exists, create one and save to disk.
     /// 2. Verify existing key file can be loaded and passes our validation.
     ///
@@ -98,6 +100,7 @@ impl CertificateRequest {
     }
 
     /// Ensure that a local CSR (Certificate Sign Request) exists in our csr filename.
+    ///
     /// 1. If no CSR exists, will create a new one, basing the subject on clientid and CA
     ///    certificate.
     /// 2. Load the CSR from disk and ensure that our private key matches the CSR request public
@@ -132,12 +135,13 @@ impl CertificateRequest {
         Ok(())
     }
 
-    /// Attempt to ensure that we get a fresh certificate from the server
-    /// 1. Attempt to download a certificate matching our CSR
-    /// 2. Post the CSR to the server if needed
-    /// 3. Loops a few times to let automatic server signing finish signing a CSR
-    /// 4. Downloads a certificate if we have one
-    /// 5. Validates that the downloaded certificate matches our CSR and our Private Key
+    /// Attempt to ensure that we get a fresh certificate from the server.
+    ///
+    /// 1. Attempt to download a certificate matching our CSR.
+    /// 2. Post the CSR to the server if needed.
+    /// 3. Loops a few times to let automatic server signing finish signing a CSR.
+    /// 4. Downloads a certificate if we have one.
+    /// 5. Validates that the downloaded certificate matches our CSR and our Private Key.
     /// 6. Stores the result on disk.
     ///
     /// # Errors

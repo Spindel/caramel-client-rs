@@ -2,6 +2,8 @@
 // Copyright 2020 Modio AB
 
 //! This module should only be used in the test configuration.
+
+
 #[cfg(test)]
 pub mod testdata {
     #[must_use]
