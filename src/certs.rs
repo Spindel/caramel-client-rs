@@ -336,7 +336,7 @@ fn openssl_verify_csr(
 ///    The Client ID must match our expected client-id.
 ///    The private key must match the Requests public key.
 ///
-/// Left undone: Verify that the CSR checks out against the server.
+/// TODO: Verify that the CSR checks out against the server.
 ///
 /// # Errors
 /// * `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.

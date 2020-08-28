@@ -40,7 +40,7 @@ pub enum CertState {
     Downloaded(Vec<u8>),
 }
 
-// Struct for Curl replies.
+/// Struct for Curl replies.
 struct CurlReply {
     status_code: u32,
     data: Vec<u8>,
@@ -88,8 +88,7 @@ fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl:
 /// # Errors
 /// * `CcError::Network` for most HTTP status-codes that we do not know what to do with.
 /// * `CcError::LibCurl` for curl internal errors. (DNS, timeout, etc.)
-/// * `CcError::CANotFound` Means that this server has no CA file.
-///                        It's probably not running caramel.
+/// * `CcError::CaNotFound` this server has no CA file and it is probably not running caramel.
 pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     // 1. Connect to server.
     // 2. Verify that TLS checks are _enabled_.
@@ -218,9 +217,6 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
 }
 
 /// Get crt _only_ attempts to fetch the certificate, and only attempts to do so once.
-/// 1. Get the required connection information (tls, curl handle, etc).
-/// 2. Calculate sha256sum of our csr to post to the server.
-/// 3. Attempt to download a fresh certificate and return it.
 ///
 /// # Ok
 /// * `CertState::NotFound`   Means that you need to POST this CSR first.
@@ -323,7 +319,7 @@ fn inner_post_csr(url: &str, res: &CurlReply) -> Result<CertState, CcError> {
 /// calculated by the contents of `csr_data`.
 ///
 /// # Errors
-/// * `CcError::LibCurl` for various curl internal errors (dns, timeout, typoed hostname, etc).
+/// * `CcError::LibCurl` for various curl internal errors (DNS, timeout, typoed hostname, etc).
 /// * `CcError::Network` for various status codes from the CA server.
 #[allow(dead_code)]
 pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertState, CcError> {

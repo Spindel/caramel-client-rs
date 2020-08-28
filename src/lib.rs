@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
-//! A crate for implementing a Caramel Client library API in Rust.
+//! A crate named caramel-client. The crate provides library API used to implement a Caramel Client in Rust.
 //!
 //! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
 
@@ -75,8 +75,4 @@ pub enum CcError {
 
     #[error("The CA certificate was not found")]
     CaNotFound,
-
-    // Cludge to make other parts of the code return CcError instead of String.
-    #[error("***ERROR*** WrappedString is no good!!!: {0}")]
-    WrappedString(String),
 }
