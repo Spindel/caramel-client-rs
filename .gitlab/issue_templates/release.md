@@ -1,0 +1,8 @@
+- [ ] Bump version in code 
+- [ ] update authors
+- [ ] create tag in repository. Add some small release-notes text
+- [ ] move all open issues from current milsteone to next (use issue list to filter and batch move)
+- [ ] close milestone
+- [ ] adjust board
+- [ ] maybe adjust dates upcoming milestones
+- [ ] publish to crates.io
