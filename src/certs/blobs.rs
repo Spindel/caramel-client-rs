@@ -9,10 +9,12 @@ pub mod testdata {
         text.as_bytes().to_vec()
     }
 
+    /// UUID for another client
     pub const OTHER_CLIENT_ID1: &str = "080d8e74-e6d3-11ea-9c0e-00155d2d5bbd";
+    /// UUID used for the certificates in this file
     pub const VALID_CLIENT_ID1: &str = "06bc4ab2-dbaf-11ea-9abc-00155dcdee8d";
 
-    // ca.sommar.modio.se.cacert
+    /// Valid CA certificate (ca.sommar.modio.se.cacert)
     pub const VALID_CACERT_DATA1: &str = "-----BEGIN CERTIFICATE-----
 MIIGDzCCA/egAwIBAgIQWAd0QqcLEeqSuH4RzI9IqTANBgkqhkiG9w0BAQ0FADBW
 MQswCQYDVQQGEwJTRTEQMA4GA1UECgwHTW9kaW9BQjEPMA0GA1UECwwGU29tbWFy

@@ -224,7 +224,7 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
 ///
 /// # Ok
 /// * `CertState::NotFound`   Means that you need to POST this CSR first.
-/// * `CertState::Downloaded` Contains the fresh certificate.
+/// * `CertState::Downloaded<Vec<u8>>` Contains the fresh certificate.
 /// * `CertState::Pending`    Means we need to wait for unknown time for the server to sign our CSR.
 /// * `CertState::Rejected`   The server has rejected our CSR, and we may need to re-generate both our Key and CSR.
 ///

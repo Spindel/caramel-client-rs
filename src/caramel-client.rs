@@ -41,7 +41,7 @@ impl CertificateRequest {
     /// Will always verify the CA certificate according to some basic parsing rules.
     ///
     /// # Errors
-    /// * `CcErrors`on CA certificate errors.
+    /// * `CcErrors` on CA certificate errors.
     pub fn ensure_cacert(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
 
@@ -76,7 +76,7 @@ impl CertificateRequest {
     /// 2. Verify existing key file can be loaded and passes our validation.
     ///
     /// # Errors
-    /// * `CcErrors`on private key errors.
+    /// * `CcErrors` on private key errors.
     pub fn ensure_key(&self) -> Result<(), CcError> {
         let key_path = Path::new(&self.key_file_name);
 
@@ -104,7 +104,7 @@ impl CertificateRequest {
     ///    key.
     ///
     /// # Errors
-    /// * `CcErrors`on CSR errors.
+    /// * `CcErrors` on CSR errors.
     pub fn ensure_csr(&self) -> Result<(), CcError> {
         let ca_path = Path::new(&self.ca_cert_file_name);
         let csr_path = Path::new(&self.csr_file_name);
