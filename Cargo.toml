@@ -3,25 +3,40 @@
 
 [package]
 name = "caramel-client"
-version = "0.1.0"
-authors = ["robert.svensk <robert.svensk@hiq.se>", "D.S. Ljungmark <ljungmark@modio.se>"]
+version = "0.5.0"
+authors = ["D.S. Ljungmark <ljungmark@modio.se>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://gitlab.com/ModioAB/caramel-client-rs"
-keywords = ["csr", "certificate", "caramel", "tls", "openssl"]
+homepage = "https://modioab.gitlab.io/caramel-client-rs/"
+keywords = ["caramel", "csr", "certificate", "tls", "openssl"]
 categories = ["command-line-utilities", "cryptography", "authentication"]
-description = "A rust client to generate keys, requests and fetch updated certificates from a caramel server"
-
+description = "A caramel client, to generate keys, requests and fetch updated certificates from a caramel server"
 readme = "README.md"
+
+exclude = [
+# Containers need not be part of package release
+   "build.mk",
+   "Makefile*",
+   "Dockerfile*",
+   ".dockerignore",
+   ".cargo-cross-config",
+# Shell script to check log output should not be part of release
+   "TESTcommands.sh",
+# gitlab data needs not be part of release
+   ".gitlab*",
+# Git data need not be part of release
+   ".gitignore",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-curl = {version = "0.4"}
+curl = "0.4"
 log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
 rand = "0.7"
-sha2 = "0.9.1"
+sha2 = "0.9"
 simple_logger = "1.6"
 thiserror = "1.0"
 
