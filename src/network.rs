@@ -4,7 +4,7 @@
 mod hexsum;
 
 use curl::easy::Easy;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use rand::prelude::*;
 use std::path::Path;
 
@@ -93,7 +93,7 @@ pub fn fetch_root_cert(server: &str) -> Result<Vec<u8>, CcError> {
     //    server.
     // 4. Download the cert, return it
     let url = format!("https://{}/root.crt", server);
-    debug!("Fetching certificate from '{}'", server);
+    debug!("Fetching CA certificate from '{}'", server);
 
     // Certificates are usually around 2100-2300 bytes
     // A 4k allocation should be good for this
@@ -132,14 +132,14 @@ fn curl_get_handle(server: &str, ca_cert: &Path) -> Result<Easy, curl::Error> {
     debug!("Probing: '{}' using default TLS settings", &server);
     match handle.perform() {
         Ok(_) => return Ok(handle),
-        Err(e) => error!("Failed to connect with default TLS settings.\n {}", e),
+        Err(e) => debug!("Failed to connect with default TLS settings.\n {}", e),
     };
     // Force a re-connect on the next run
     handle.fresh_connect(true)?;
     handle.cainfo(ca_cert)?;
 
     debug!(
-        "Probing '{}' using {:?} as CA certificate",
+        "Probing '{}' using '{:?}' as CA certificate",
         &server, ca_cert
     );
     match handle.perform() {
@@ -193,7 +193,7 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
         202 | 304 => Ok(CertState::Pending),
         404 => Ok(CertState::NotFound),
         403 => {
-            info!(
+            warn!(
                 "Rejected CSR from server when fetching '{}':\n {:?}",
                 url, res.data
             );

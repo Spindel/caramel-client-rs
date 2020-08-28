@@ -222,7 +222,7 @@ fn make_inner_subject(ca_subject: &X509NameRef, client_id: &str) -> Result<X509N
             );
             subject.append_entry_by_nid(Nid::COMMONNAME, client_id)?;
         } else {
-            debug!("Passing through '{:?}'=='{}'", &entry_nid, &entry_text);
+            trace!("Passing through '{:?}'=='{}'", &entry_nid, &entry_text);
             subject.append_entry_by_nid(entry_nid, &entry_text)?;
         }
     }
@@ -412,7 +412,7 @@ pub fn verify_cert(
         Ok(VerifyCertResult::CertSignatureInvalid) => Err(CcError::CertSignatureInvalid),
         Ok(VerifyCertResult::CertCommonNameMismatch) => Err(CcError::CertCommonNameMismatch),
         Err(e) => {
-            error!(target:"openssl", "Error verifying CA certificate: {}", e);
+            error!("Error verifying CA certificate: '{}'", e);
             Err(CcError::CertValidationFailure)
         }
     }

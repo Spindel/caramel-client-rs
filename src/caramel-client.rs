@@ -4,7 +4,7 @@
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
-use log::{debug, error, info};
+use log::{debug, info};
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
@@ -75,7 +75,7 @@ impl CertificateRequest {
 
         if !key_path.exists() {
             info!(
-                "Private key file: '{:?}' does not exist, creating key file",
+                "Private key file: '{:?}' does not exist, creating",
                 &key_path
             );
             let key_data = certs::create_private_key()?;
@@ -160,14 +160,15 @@ impl CertificateRequest {
         let key_data = std::fs::read(&key_path).unwrap();
         let valid = certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id);
         if valid.is_err() {
-            error!(
+            debug!(
                 "Invalid certificate received from '{}'\n {:?}",
                 &self.server, valid
             );
-            return Err("Invalid certificate received from server".to_owned());
+            let err_msg = format!("Invalid certificate received from '{}'", &self.server);
+            return Err(err_msg);
         }
 
-        debug!("Verify CRT file:'{:?}'", &crt_path);
+        debug!("Verify CRT file: '{:?}'", &crt_path);
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
             if cert_data == temp_crt {
@@ -230,7 +231,7 @@ fn read_cmd_input() -> Result<(String, String), String> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simple_logger::init_with_level(log::Level::Trace).unwrap();
+    simple_logger::init_with_level(log::Level::Debug).unwrap();
     let (server, client_id) = read_cmd_input()?;
     let res = certificate_request(&server, &client_id);
 
