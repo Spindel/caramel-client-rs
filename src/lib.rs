@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+//! A crate named caramel-client. The crate provides library API used to implement a Caramel Client in Rust.
+//!
+//! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
+
 pub mod certs;
 pub mod network;
 
 #[derive(thiserror::Error, Debug, PartialEq)]
+/// Enum `CcError` used for library error replies.
 pub enum CcError {
     // certs.rs errors
     #[error("Unable to parse private key")]

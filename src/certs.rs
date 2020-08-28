@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Copyright 2020 Modio AB
 
+//! Certificate handling API for a Caramel Client.
+
 use crate::CcError;
 use log::{debug, error, info, trace};
 use openssl::error::ErrorStack;
@@ -11,12 +13,12 @@ use openssl::x509::{X509Name, X509NameRef, X509Req, X509};
 
 pub mod blobs;
 
-// Encoded in upstream definitions
+// Encoded in upstream definitions.
 const MAX_CN_LENGTH: usize = 64;
 
-/// Desired RSA key length
+/// Desired RSA key length.
 const DESIRED_RSA_BITS: u32 = 2048;
-/// Minimum RSA key length accepted
+/// Minimum RSA key length accepted.
 pub const MIN_RSA_BITS: u32 = 2048;
 
 enum VerifyCertResult {
@@ -27,8 +29,9 @@ enum VerifyCertResult {
 }
 
 /// Use openssl to verify CA certificate.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if certificate cannot be loaded or is malformed.
+/// * openssl `ErrorStack` if certificate cannot be loaded or is malformed.
 fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
     let ca_cert = X509::from_pem(&ca_cert_data)?;
     trace!(target:"openssl", "Use openssl to verify CA certificate: {:?}", ca_cert);
@@ -38,10 +41,10 @@ fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
 }
 
 /// Load and verify that the CA certificate is okay.
+///
 /// # Errors
-/// Will return `CcError::CaCertNotSelfSigned` CA cerificate cannot be verified.
-/// Will return `CcError::CaCertParseFailure` if passed invalid data that cannot be parsed as
-/// a CA certificate by openssl.
+/// * `CcError::CaCertNotSelfSigned` if CA cerificate cannot be verified.
+/// * `CcError::CaCertParseFailure`  if passed invalid data that cannot be parsed as a CA certificate by openssl.
 pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
     /*
        openssl  verify  -CAfile  filename, filename
@@ -59,11 +62,12 @@ pub fn verify_cacert(ca_cert_data: &[u8]) -> Result<(), CcError> {
 }
 
 /// Load and verify that the private key is okay. not too short, can be parsed, etc.
-/// should probably take a path or similar rather than a string.
+///
+/// TODO should probably take a path or similar rather than a string.
+///
 /// # Errors
-/// Will return `CcError::PrivateKeyParseFailure` if passed invalid data that cannot be parsed as
-/// a private key.
-/// Will return `CcError::PrivateKeyTooShort` if the private key is to short.
+/// * `CcError::PrivateKeyParseFailure` if passed invalid data that cannot be parsed as a private key.
+/// * `CcError::PrivateKeyTooShort`     if the private key is too short.
 pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
     // Matching of
     /*
@@ -80,7 +84,10 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
     }
     Ok(())
 }
-
+/// Use openssl to create a new private key and return it.
+///
+/// # Errors
+/// * openssl `ErrorStack` if private key cannot be created.
 fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
     trace!(target:"openssl", "Use openssl to create private key size: {} bits", size);
     let rsa = Rsa::generate(size)?;
@@ -90,8 +97,9 @@ fn openssl_create_private_key(size: u32) -> Result<Vec<u8>, ErrorStack> {
 }
 
 /// Create a new private key and return it.
+///
 /// # Errors
-/// Will return `CcError::PrivateKeyCreationFailure` if a private RSA key cannot be created.
+/// * `CcError::PrivateKeyCreationFailure` if a private RSA key cannot be created.
 pub fn create_private_key() -> Result<Vec<u8>, CcError> {
     match openssl_create_private_key(DESIRED_RSA_BITS) {
         Ok(c) => Ok(c),
@@ -155,8 +163,7 @@ fn workaround_subject() -> (X509Name, X509Name) {
 fn clone_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
     let ca_cert = X509::from_pem(&ca_data)?;
     let mut ca_subject = X509Name::builder()?;
-    // From a cert we cannot get an _owned_ copy of the subject without loading if from a PEM file
-    // on disk.
+    // From a certificate we cannot get an _owned_ copy of the subject without loading if from a PEM file on disk.
     // This iterates over the subject and copies it element-by-element instead, in order to make
     // sure that we are the sole owner of all the subjects
     for entry in ca_cert.subject_name().entries() {
@@ -169,8 +176,9 @@ fn clone_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
 
 /// Parse the cert-data from a file, returning an owned copy of a CA subject.
 /// This handles the data-replacement of our "known bad" compatibility subject as well.
-/// #Errors
-/// Will return openssl `ErrorStack` the data-replacemen the in the X509 object fails.
+///
+/// # Errors
+/// * openssl `ErrorStack` the data-replacemen the in the X509 object fails.
 fn get_ca_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
     let subject = clone_subject(ca_data)?;
     let (before, after) = workaround_subject();
@@ -193,17 +201,18 @@ fn get_ca_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
     }
 }
 
-/// Make a new subject from the CA subject
+/// Make a new subject from the CA subject.
 ///
 /// ex.  Converts  from
 ///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = Caramel Signing Certificate`
 /// to
 ///    `subject=C = SE, O = ModioAB, OU = Sommar, CN = be172c92-d002-4f8d-a702-32683f57d3f9`
-/// It passes through all data-points _except_ COMMONNAME, which is set to `client_id`
+/// It passes through all data-points _except_ COMMONNAME, which is set to `client_id`.
 ///
-/// This code works with OpenSSL datatypes and errors
+/// This code works with OpenSSL datatypes and errors.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if openssl fails.
+/// * openssl `ErrorStack` if openssl fails.
 fn make_inner_subject(ca_subject: &X509NameRef, client_id: &str) -> Result<X509Name, ErrorStack> {
     use openssl::nid::Nid;
 
@@ -230,15 +239,16 @@ fn make_inner_subject(ca_subject: &X509NameRef, client_id: &str) -> Result<X509N
     Ok(our_subject)
 }
 
-/// Create a subject from a `ca_cert_data` + our expected `client_id`
-/// The general case rule is to take the CA cert and _only_ replace the common name.
+/// Create a subject from a `ca_cert_data` + our expected `client_id`.
+/// The general case rule is to take the CA certificate and _only_ replace the common name.
 /// This means that all the other fields in the CA subject should match exactly.
 ///
 /// there is also a special case that is handled when reading out the CA certificate.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if openssl fails.
+/// * openssl `ErrorStack` if openssl fails.
 fn openssl_make_subject(ca_cert_data: &[u8], client_id: &str) -> Result<X509Name, ErrorStack> {
-    //  This is the old Python code
+    // This is the old Python code
     // Caramel has the extra requirement that SUBJECT should come in the same order as it was in the
     // PKI root SUBJECT, only differing in the CN= part (CommonName)
     //
@@ -272,9 +282,10 @@ fn openssl_make_subject(ca_cert_data: &[u8], client_id: &str) -> Result<X509Name
     Ok(new_subject)
 }
 
-/// See if COMMONNAME of the subject matches an expected `client_id`
+/// See if COMMONNAME of the subject matches an expected `client_id`.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if openssl fails.
+/// * openssl `ErrorStack` if openssl fails.
 fn check_commoname_match(subject: &x509::X509NameRef, client_id: &str) -> Result<bool, ErrorStack> {
     use openssl::nid::Nid;
     let entry = subject.entries_by_nid(Nid::COMMONNAME).next().unwrap();
@@ -296,6 +307,10 @@ enum VerifyCsrResult {
     CommonNameMismatch,
 }
 
+/// Use openssl to verify the CSR.
+///
+/// # Errors
+/// * openssl `ErrorStack` if either input is invalid.
 fn openssl_verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
@@ -319,15 +334,16 @@ fn openssl_verify_csr(
 }
 
 /// Verify that the Certificate Sign Request is valid according to our rules.
-///    The Client ID must match our expected client-id.
-///    The private key must match the Requests public key.
 ///
-/// Left undone: Verify that the CSR checks out against the server
+/// 1. The Client ID must match our expected client-id.
+/// 2. The private key must match the Requests public key.
+///
+/// TODO: Verify that the CSR checks out against the server.
+///
 /// # Errors
-///
-/// Will return `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.
-/// Will return `CcError::CsrValidationFailure` if CSR cannot be parsed.
-/// Will return `CcError::CsrCommonNameMismatch` if `CommonName` in CSR does not match `client_id`.
+/// * `CcError::CsrSignedWithWrongKey` if CSR cannot be validated.
+/// * `CcError::CsrValidationFailure`  if CSR cannot be parsed.
+/// * `CcError::CsrCommonNameMismatch` if `CommonName` in CSR does not match `client_id`.
 pub fn verify_csr(
     csr_data: &[u8],
     private_key_data: &[u8],
@@ -349,9 +365,10 @@ pub fn verify_csr(
     }
 }
 
-// Use openssl to verify the CA certificate.
+/// Use openssl to verify the CA certificate.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if either input is invalid.
+/// * openssl `ErrorStack` if either input is invalid.
 fn openssl_verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
@@ -391,12 +408,14 @@ fn openssl_verify_cert(
     Ok(VerifyCertResult::Ok)
 }
 
-/// Verify that the CA certificate we downloaded matches what we want checks:
-///     Private key corresponds to public key in the cert
-///     subject/ Common name in cert matches our client id
-///     Cert signature was signed by our expected CA cert
+/// Verify that the CA certificate we downloaded matches what we want checks.
+///
+/// 1. Private key corresponds to public key in the cert.
+/// 2. Subject/ Common name in certificate matches our client id.
+/// 3. Certificate signature was signed by our expected CA certificate.
+///
 /// # Errors
-/// Will return `CcError` if CA certificate does not match or cannot be valided.
+/// * `CcError` if CA certificate does not match or cannot be valided.
 pub fn verify_cert(
     cert_data: &[u8],
     ca_cert_data: &[u8],
@@ -419,11 +438,11 @@ pub fn verify_cert(
 }
 
 /// Create a new CSR request from the OpenSSL Private key and Subject, returning the data as a PEM
-/// Create a new CSR request from the OpenSSL Private key and Subject,
-/// returning the data as a PEM object vector.
+/// Create a new CSR request from the OpenSSL Private key and Subject, returning the data as a PEM object vector.
 /// This function works on and with OpenSSL data-types.
+///
 /// # Errors
-/// Will return openssl `ErrorStack` if either input is invalid.
+/// * openssl `ErrorStack` if either input is invalid.
 fn openssl_create_csr(private_key_data: &[u8], subject: &X509Name) -> Result<Vec<u8>, ErrorStack> {
     use openssl::hash::MessageDigest;
     use openssl::x509::X509ReqBuilder;
@@ -439,10 +458,11 @@ fn openssl_create_csr(private_key_data: &[u8], subject: &X509Name) -> Result<Vec
     Ok(pem)
 }
 
-/// Make a CSR. Indata is so generic, but I don't know the openssl/rust datatypes well enough placeholder.
+/// Create a Certificate Sign Request.
+///
 /// # Errors
-/// Will return `CcError::CsrBuildSubjectFailure` if a openssl object cannot be created.
-/// Will return `CcError::CsrBuildFailure` if CSR cannot be created.
+/// * `CcError::CsrBuildSubjectFailure` if a openssl object cannot be created.
+/// * `CcError::CsrBuildFailure`        if CSR cannot be created.
 pub fn create_csr(
     ca_cert_data: &[u8],
     private_key_data: &[u8],
@@ -452,7 +472,7 @@ pub fn create_csr(
     config:
         [ req ]
         default_bits        = 2048
-        default_md      = sha256
+        default_md          = sha256
         default_keyfile     = privkey.pem
         distinguished_name  = req_distinguished_name
         attributes      = req_attributes
@@ -520,7 +540,7 @@ pub fn create_csr(
 }
 
 // To enable logging for one testcase, change "#[test]" -> "#[test_env_log::test]",
-// when execute `cargo test -- --nocapture` or `cargo test --workspace --verbose -- --nocapture`
+// when execute `cargo test -- --nocapture` or `cargo test --workspace --verbose -- --nocapture`.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -610,7 +630,7 @@ mod tests {
         }
     }
 
-    /// Normal functionality, subject passed through and CSR generated
+    /// Normal functionality, subject passed through and CSR generated.
     #[test]
     fn test_making_csr_no_override() {
         let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
@@ -624,7 +644,7 @@ mod tests {
     }
 
     #[test]
-    /// Override functionality, should fail
+    /// Override functionality, should fail.
     fn test_making_csr_with_override() {
         let valid_key = convert_string_to_vec8(VALID_KEY_DATA1);
         let ca_modio_se = convert_string_to_vec8(WORKAROUND_CACERT);
