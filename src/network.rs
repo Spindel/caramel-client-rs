@@ -5,6 +5,7 @@ mod hexsum;
 
 use curl::easy::Easy;
 use log::{debug, error, info};
+use rand::prelude::*;
 use std::path::Path;
 
 use crate::CcError;
@@ -336,17 +337,22 @@ fn calculate_backoff(count: usize) -> std::time::Duration {
     // Note, this could be improved by adding a jitter to it
     // https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 
-    const MAX: Duration = Duration::from_secs(15);
-    const BASE: Duration = Duration::from_millis(25);
+    const MAX: Duration = Duration::from_secs(23);
+    const BASE: Duration = Duration::from_millis(870);
     const TWO: u32 = 2;
 
-    let count = max(1, count);
+    // Note that 2^0 = 1
+    let count = max(0, count);
     // If count overflows into a u32, attempt it's a big number.
     let attempt: u32 = count.try_into().unwrap_or(100);
     let duration: u32 = TWO.saturating_pow(attempt);
 
     let delay: Duration = BASE * duration;
-    min(MAX, delay)
+    let bounded_delay = min(MAX, delay);
+    // Add jitter, select a point at random, [+15%, -15%] of the bounded delay
+    let mut generator = rand::thread_rng();
+    let between_0_and_1: f64 = generator.gen();
+    bounded_delay.mul_f64(1.0 + 0.3 * (between_0_and_1 - 0.5))
 }
 
 /// Tries to ensure we can get a certificate
@@ -400,35 +406,55 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    const BIG_DUR: Duration = Duration::from_secs(60);
+    const SMALL_DUR: Duration = Duration::from_millis(500);
+
     #[must_use]
     pub fn convert_string_to_vec8(text: &str) -> Vec<u8> {
         text.as_bytes().to_vec()
     }
 
     #[test]
-    fn test_backoff() {
-        const BIG_DUR: Duration = Duration::from_secs(60);
-        const SMALL_DUR: Duration = Duration::from_millis(25);
-
+    fn test_backoff_zero() {
         let zero = calculate_backoff(0);
         assert!(zero < BIG_DUR);
         assert!(zero > SMALL_DUR);
+    }
 
+    #[test]
+    fn test_backoff_one() {
         let one = calculate_backoff(1);
         assert!(one < BIG_DUR);
         assert!(one > SMALL_DUR);
-        assert!(one >= zero);
+    }
 
+    #[test]
+    fn test_backoff_increasing() {
+        const LIMIT_FOR_INCREMENT: Duration = Duration::from_secs(15);
+        let mut previous = calculate_backoff(0);
+        let mut count = 1;
+        while previous < LIMIT_FOR_INCREMENT {
+            let current = calculate_backoff(count);
+
+            assert!(current >= previous);
+            count += 1;
+            previous = current;
+        }
+    }
+
+    #[test]
+    fn test_backoff_large_values() {
         let thousand = calculate_backoff(1000);
         assert!(thousand < BIG_DUR);
         assert!(thousand > SMALL_DUR);
-        assert!(thousand >= one);
+    }
 
+    #[test]
+    fn test_backoff_bignum() {
         // number is larger than u32, make sure wrap logic works
         let bignum = calculate_backoff(8_589_934_592);
         assert!(bignum < BIG_DUR);
         assert!(bignum > SMALL_DUR);
-        assert!(bignum >= thousand);
     }
 
     fn make_reply(status_code: u32, msg: &str) -> CurlReply {
