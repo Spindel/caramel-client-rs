@@ -41,7 +41,7 @@ impl CertificateRequest {
 
         if !ca_path.exists() {
             info!(
-                "CA certificate file: '{:?}' does not exist, fetching from '{}'",
+                "CA certificate file: {:?} does not exist, fetching from '{}'",
                 &ca_path, &self.server
             );
 
@@ -60,7 +60,7 @@ impl CertificateRequest {
             file.write_all(&ca_data).unwrap();
         }
 
-        debug!("Verifying CA certificate file: '{:?}'", &ca_path);
+        debug!("Verifying CA certificate file: {:?}", &ca_path);
         let ca_data = std::fs::read(&ca_path).unwrap();
         certs::verify_cacert(&ca_data)
     }
@@ -75,7 +75,7 @@ impl CertificateRequest {
 
         if !key_path.exists() {
             info!(
-                "Private key file: '{:?}' does not exist, creating",
+                "Private key file: {:?} does not exist, creating",
                 &key_path
             );
             let key_data = certs::create_private_key()?;
@@ -88,7 +88,7 @@ impl CertificateRequest {
             file.write_all(&key_data).unwrap();
         }
 
-        debug!("Verifying private key file: '{:?}'", &key_path);
+        debug!("Verifying private key file: {:?}", &key_path);
         let data = std::fs::read(&key_path).unwrap();
         certs::verify_private_key(&data)
     }
@@ -108,7 +108,7 @@ impl CertificateRequest {
         let key_data = std::fs::read(&key_path).unwrap();
         if !csr_path.exists() {
             info!(
-                "CSR file: '{:?}' does not exist, creating CSR file",
+                "CSR file: {:?} does not exist, creating CSR file",
                 &csr_path
             );
             let ca_data = std::fs::read(&ca_path).unwrap();
@@ -121,7 +121,7 @@ impl CertificateRequest {
             file.write_all(&csrdata).unwrap();
         }
 
-        debug!("Verifying CSR file: '{:?}'", &csr_path);
+        debug!("Verifying CSR file: {:?}", &csr_path);
         let csr_data = std::fs::read(&csr_path).unwrap();
         certs::verify_csr(&csr_data, &key_data, &self.client_id)?;
         Ok(())
@@ -168,7 +168,7 @@ impl CertificateRequest {
             return Err(err_msg);
         }
 
-        debug!("Verify CRT file: '{:?}'", &crt_path);
+        debug!("Verify CRT file: {:?}", &crt_path);
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
             if cert_data == temp_crt {
@@ -178,7 +178,7 @@ impl CertificateRequest {
         }
         // We explicitly open for over-write here as we either have a new file, or are writing a
         // new certificate to the file.
-        debug!("Writing CRT file: '{:?}'", &crt_path);
+        debug!("Writing CRT file: {:?}", &crt_path);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
