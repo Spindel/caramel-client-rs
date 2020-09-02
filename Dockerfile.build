@@ -20,9 +20,11 @@ COPY .cargo-cross-config /usr/local/cargo/config
 
 # See https://github.com/rust-lang/docker-rust/blob/master/Dockerfile-debian.template for details
 RUN dpkg --add-architecture armhf \
+    && echo "deb http://deb.debian.org/debian stretch-backports main" >> /etc/apt/sources.list \
     && apt-get update \
     && apt-get install --no-install-recommends -y libc6-armhf-cross libc6-dev-armhf-cross gcc-arm-linux-gnueabihf \
-    && apt-get install --no-install-recommends -y musl-tools libc-dev wget git make ca-certificates \
+    && apt-get install --no-install-recommends -y musl-tools libc-dev wget make ca-certificates \
+    && apt-get install --no-install-recommends -y -t stretch-backports git \
     && rm -rf /var/lib/apt/lists/* \
     && wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
     && chmod +x rustup-init \
