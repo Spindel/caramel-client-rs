@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2020 Modio AB
 
-FROM rust:buster
+FROM debian:stretch
 
 ARG URL=unknown
 ARG COMMIT=unknown
@@ -11,13 +11,30 @@ ARG DATE=unknown
 LABEL "se.modio.ci.url"=$URL  "se.modio.ci.branch"=$BRANCH  "se.modio.ci.commit"=$COMMIT  "se.modio.ci.host"=$HOST  "se.modio.ci.date"=$DATE
 
 
+ENV RUSTUP_HOME=/usr/local/rustup \
+   CARGO_HOME=/usr/local/cargo \
+   PATH=/usr/local/cargo/bin:$PATH
+
+
 COPY .cargo-cross-config /usr/local/cargo/config
 
+# See https://github.com/rust-lang/docker-rust/blob/master/Dockerfile-debian.template for details
 RUN dpkg --add-architecture armhf \
+    && echo "deb http://deb.debian.org/debian stretch-backports main" >> /etc/apt/sources.list \
     && apt-get update \
-    && apt-get install -y libcurl4-openssl-dev libssl-dev \
-    && apt-get install -y libc6-armhf-cross libc6-dev-armhf-cross gcc-arm-linux-gnueabihf \
+    && apt-get install --no-install-recommends -y libc6-armhf-cross libc6-dev-armhf-cross gcc-arm-linux-gnueabihf \
+    && apt-get install --no-install-recommends -y musl-tools libc-dev wget make ca-certificates \
+    && apt-get install --no-install-recommends -y -t stretch-backports git \
     && rm -rf /var/lib/apt/lists/* \
+    && wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+    && chmod +x rustup-init \
+    && ./rustup-init -y --no-modify-path \
+    && rm -f rustup-init \
     && rustup target add armv7-unknown-linux-gnueabihf \
+    && rustup target add x86_64-unknown-linux-musl \
+    && rustup target add x86_64-unknown-linux-gnu \
     && rustup component add clippy \
-    && rustup component add rustfmt
+    && rustup component add rustfmt \
+    && rustc --version \
+    && rustup --version \
+    && cargo --version
