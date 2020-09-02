@@ -9,6 +9,7 @@ use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
 use log::{debug, error, info};
+use simple_logger::SimpleLogger;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
@@ -248,7 +249,8 @@ fn read_cmd_input() -> Result<(String, String), String> {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simple_logger::init_with_level(log::Level::Debug).unwrap();
+    SimpleLogger::new().with_level(log::LevelFilter::Debug);
+
     let (server, client_id) = read_cmd_input()?;
     let res = certificate_request(&server, &client_id);
 
