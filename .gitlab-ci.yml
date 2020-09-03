@@ -7,33 +7,21 @@
 # to upstream `rust:buster` container
 image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
+include:
+  - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
+
 # Use cargo to test the project
 test:cargo:
-  rules:
-    # Do not run this on push to avoid double-pipelines
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
-    - when: always
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
 
 lint:
-  rules:
-    # Do not run this on push to avoid double-pipelines
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
-    - when: always
   script:
     - cargo fmt -- --check
     - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
 
 crosscompile:
-  rules:
-    # Do not run this on push to avoid double-pipelines
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-      when: never
-    - when: always
   script:
     - cargo check --target x86_64-unknown-linux-gnu
     - cargo check --target armv7-unknown-linux-gnueabihf
