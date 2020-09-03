@@ -41,6 +41,9 @@ crosscompile:
 release:container:
   stage: deploy
   image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  needs:
+    - job: release
+      artifacts: true
   rules:
     # Build when any of these files change
     - changes:
@@ -97,7 +100,6 @@ release:
     paths:
       - target/*/release/caramel-client-rs
       - target/*/release/caramel-client-rs.sha256
-
 
 .rebase: &rebase
   stage: build
