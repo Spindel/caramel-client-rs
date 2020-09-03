@@ -10,6 +10,11 @@ image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 include:
   - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
 
+stages:
+  - test
+  - build
+  - deploy
+
 # Use cargo to test the project
 test:cargo:
   script:
@@ -33,6 +38,7 @@ crosscompile:
 
 # This builds the "client" container that others can use to run the application.
 release:container:
+  stage: deploy
   image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
   rules:
     # Build when any of these files change
@@ -61,6 +67,7 @@ release:container:
 
 # Compile a binary, uploading an artifact to the GitLab server
 release:
+  stage: build
   rules:
     # Always build on tags
     - if: '$CI_COMMIT_TAG'
@@ -89,8 +96,11 @@ release:
 
 
 .rebase: &rebase
-  stage: test
+  stage: build
   allow_failure: true
+  needs:
+    - job: lint
+      artifacts: false
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       # do not run on master
@@ -102,7 +112,7 @@ release:
 
     - if: $CI_MERGE_REQUEST_IID
       # Run only on merge requests
-      when: always
+      when: on_success
 
   variables:
     # Make sure that git also fetches origin/master
@@ -148,8 +158,11 @@ rebase:doc:
 # https://modioab.gitlab.io/caramel-client-rs/
 pages:
   stage: deploy
-  only:
-    - master
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      # only run on master
+      when: on_success
+    - when: never
   script:
     - cargo doc --no-deps -p caramel-client
     - rm -rf public
@@ -162,6 +175,7 @@ pages:
 
 # This build the "build" container
 container:build:
+  stage: build
   image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
   rules:
     # Build when any of these files change
