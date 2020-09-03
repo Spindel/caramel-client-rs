@@ -249,7 +249,10 @@ fn read_cmd_input() -> Result<(String, String), String> {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    SimpleLogger::new().with_level(log::LevelFilter::Debug).init().unwrap();
+    SimpleLogger::new()
+        .with_level(log::LevelFilter::Debug)
+        .init()
+        .unwrap();
 
     let (server, client_id) = read_cmd_input()?;
     let res = certificate_request(&server, &client_id);
