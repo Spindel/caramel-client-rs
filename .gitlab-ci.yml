@@ -1,3 +1,4 @@
+---
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2020 Modio AB
 
@@ -8,16 +9,31 @@ image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
 # Use cargo to test the project
 test:cargo:
+  rules:
+    # Do not run this on push to avoid double-pipelines
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - when: always
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
 
 lint:
+  rules:
+    # Do not run this on push to avoid double-pipelines
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - when: always
   script:
     - cargo fmt -- --check
     - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
 
 crosscompile:
+  rules:
+    # Do not run this on push to avoid double-pipelines
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - when: always
   script:
     - cargo check --target x86_64-unknown-linux-gnu
     - cargo check --target armv7-unknown-linux-gnueabihf
@@ -33,9 +49,9 @@ release:container:
   rules:
     # Build when any of these files change
     - changes:
-      - Dockerfile
-      - Makefile
-      - build.mk
+        - Dockerfile
+        - Makefile
+        - build.mk
     # Always build on tags
     - if: '$CI_COMMIT_TAG'
       when: on_success
@@ -44,7 +60,8 @@ release:container:
       when: on_success
     # Allow users to _manually_ build this from merge-requests
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
+      # If it's not tagged as "allow_failure", it will block the merge request
+      # pipelines
       allow_failure: true
       when: manual
     # Do not build on other conditions
@@ -62,16 +79,19 @@ release:
       when: on_success
     # Permit binary builds from merge-requests
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
+      # If it's not tagged as "allow_failure", it will block the merge request
+      # pipelines
       allow_failure: true
       when: manual
     # Do not build on other conditions
     - when: never
   script:
     - cargo build --release --target x86_64-unknown-linux-gnu
-    - ( cd target/x86_64-unknown-linux-gnu/release; sha256sum caramel-client-rs > caramel-client-rs.sha256 )
+    - ( cd target/x86_64-unknown-linux-gnu/release;
+        sha256sum caramel-client-rs > caramel-client-rs.sha256 )
     - cargo build --release --target armv7-unknown-linux-gnueabihf
-    - ( cd target/armv7-unknown-linux-gnueabihf/release; sha256sum caramel-client-rs > caramel-client-rs.sha256 )
+    - ( cd target/armv7-unknown-linux-gnueabihf/release;
+        sha256sum caramel-client-rs > caramel-client-rs.sha256 )
 
   artifacts:
     name: "$CI_COMMIT_REF_SLUG"
@@ -157,15 +177,16 @@ container:build:
   rules:
     # Build when any of these files change
     - changes:
-      - Dockerfile.build
-      - Makefile.build
-      - build.mk
+        - Dockerfile.build
+        - Makefile.build
+        - build.mk
     # Always build from scheduled builds
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: on_success
     # Allow users to _manually_ build this from merge-requests in cases.
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      # If it's not tagged as "allow_failure" it blocks the merge request pipelines
+      # If it's not tagged as "allow_failure", it will block the merge request
+      # pipelines
       allow_failure: true
       when: manual
     # Do not build on other conditions
