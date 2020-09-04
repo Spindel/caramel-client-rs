@@ -25,6 +25,7 @@ lint:
   script:
     - cargo fmt -- --check
     - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
+    - cargo doc --no-deps -p caramel-client
 
 crosscompile:
   script:
@@ -33,7 +34,6 @@ crosscompile:
     # Build
     - cargo build --target x86_64-unknown-linux-gnu
     - cargo build --target armv7-unknown-linux-gnueabihf
-    - cargo doc --no-deps -p caramel-client
 
 
 # This builds the "client" container that others can use to run the application.
