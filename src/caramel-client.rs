@@ -12,12 +12,20 @@ use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
 use clap::{App, Arg};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use simple_logger::SimpleLogger;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+
+mod file_access_modes;
+use file_access_modes::FileModeComparison;
+use file_access_modes::verify_file_permissions;
+
+// File system permissions
+const FILE_PERMISSION_600: u32 = 0o600;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 /// Struct for `CertificateRequest`.
@@ -88,12 +96,23 @@ impl CertificateRequest {
     pub fn ensure_key(&self) -> Result<(), CcError> {
         let key_path = Path::new(&self.key_file_name);
 
-        if !key_path.exists() {
+        if key_path.exists() {
+            match verify_file_permissions(&key_path, FILE_PERMISSION_600) {
+                Ok((FileModeComparison::MatchingPermissions, _)) => { /* Do nothing */ }
+                Ok((FileModeComparison::UserOrGroupPermissionsDiffers, file_ugw_perm)) => {
+                    warn!("File: {:?} has file permissions '{:04o}'. The default file permission is '{:04o}'.",
+                    &key_path, file_ugw_perm, FILE_PERMISSION_600
+                );
+                }
+                Err(e) => return Err(e),
+            }
+        } else {
             info!("Private key file: {:?} does not exist, creating", &key_path);
             let key_data = certs::create_private_key()?;
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
+                .mode(FILE_PERMISSION_600)
                 .open(&key_path)
                 .unwrap();
 

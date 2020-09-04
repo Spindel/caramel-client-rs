@@ -75,4 +75,16 @@ pub enum CcError {
 
     #[error("The CA certificate was not found")]
     CaNotFound,
+
+    #[error("File '{filename:?}' has file permissions '{file_perm:04o}'. The default file permission is '{default_perm:04o}'.\n\
+     Change the file permission for 'other' users to '{default_other_perm:o}'.")]
+    OtherUsersFilePermissionMismatch {
+        filename: String,
+        file_perm: u32,
+        default_perm: u32,
+        default_other_perm: u32,
+    },
+
+    #[error("The private key was not found or could not be accessed")]
+    PrivateKeyNotFound,
 }
