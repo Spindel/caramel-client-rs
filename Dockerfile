@@ -3,16 +3,19 @@
 
 FROM rust:buster AS build
 
-# To make sure we build & link against the same libraries, we install openssl and curl headers.
 RUN apt-get update \
-    && apt-get install -y libcurl4-openssl-dev libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y musl-tools ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && /usr/sbin/update-ca-certificates
 
 WORKDIR /data
 COPY . /data
-RUN cargo build --release
 
-FROM debian:buster
+RUN mkdir /empty/ \
+    && rustup target add x86_64-unknown-linux-musl  \
+    && cargo build --release --target x86_64-unknown-linux-musl
+
+FROM scratch
 
 ARG URL=unknown
 ARG COMMIT=unknown
@@ -21,15 +24,10 @@ ARG HOST=unknown
 ARG DATE=unknown
 LABEL "se.modio.ci.url"=$URL  "se.modio.ci.branch"=$BRANCH  "se.modio.ci.commit"=$COMMIT  "se.modio.ci.host"=$HOST  "se.modio.ci.date"=$DATE
 
-# To run, we currently need:
-#    ca-certificates ( public PKI root)
-#    libssl (openssl)
-#    libcurl (curl)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libcurl4 libssl1.1 ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=build /data/target/release/caramel-client-rs /usr/bin/caramel-client-rs
+COPY --from=build /etc/ssl/ /etc/ssl/
+# We can't create a directory inside the scratch container, so we copy one
+COPY --from=build /empty/ /data/
+COPY --from=build /data/target/x86_64-unknown-linux-musl/release/caramel-client-rs /usr/bin/caramel-client-rs
 
 WORKDIR /data
 ENTRYPOINT ["/usr/bin/caramel-client-rs"]
