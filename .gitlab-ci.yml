@@ -34,16 +34,9 @@ crosscompile:
     - cargo build --target x86_64-unknown-linux-musl
     - cargo build --target armv7-unknown-linux-gnueabihf
 
-
-# This builds the "client" container that others can use to run the application.
-release:container:
-  stage: deploy
-  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
-  needs:
-    - job: release
-      artifacts: true
+.release: &release
   rules:
-    # Build when any of these files change
+    # Build containers & release when any of these files change
     - changes:
         - Dockerfile
         - Makefile
@@ -62,26 +55,12 @@ release:container:
       when: manual
     # Do not build on other conditions
     - when: never
-  script:
-    - make login
-    # Build the client container
-    - make -f Makefile build-publish
+
 
 # Compile a binary, uploading an artifact to the GitLab server
 release:
+  <<: *release
   stage: build
-  rules:
-    # Always build on tags
-    - if: '$CI_COMMIT_TAG'
-      when: on_success
-    # Permit binary builds from merge-requests
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      # If it's not tagged as "allow_failure", it will block the merge request
-      # pipelines
-      allow_failure: true
-      when: manual
-    # Do not build on other conditions
-    - when: never
   script:
     - cargo build --release --target x86_64-unknown-linux-gnu
     - ( cd target/x86_64-unknown-linux-gnu/release;
@@ -92,12 +71,26 @@ release:
     - cargo build --release --target armv7-unknown-linux-gnueabihf
     - ( cd target/armv7-unknown-linux-gnueabihf/release;
         sha256sum caramel-client-rs > caramel-client-rs.sha256 )
-
   artifacts:
     name: "$CI_COMMIT_REF_SLUG"
     paths:
       - target/*/release/caramel-client-rs
       - target/*/release/caramel-client-rs.sha256
+
+
+# This builds the "client" container that others can use to run the application.
+release:container:
+  <<: *release
+  stage: deploy
+  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  needs:
+    - job: release
+      artifacts: true
+  script:
+    - make login
+    # Build the client container
+    - make -f Makefile build-publish
+
 
 .rebase: &rebase
   stage: build
