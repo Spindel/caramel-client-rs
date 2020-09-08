@@ -2,6 +2,7 @@
 # Copyright 2020 Modio AB
 
 FROM scratch
+STOPSIGNAL SIGINT
 
 ARG URL=unknown
 ARG COMMIT=unknown
