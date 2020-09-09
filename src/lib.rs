@@ -27,7 +27,7 @@ pub enum CcError {
     #[error("CA certificate not self-signed")]
     CaCertNotSelfSigned,
 
-    #[error("Unable to parse CA cert")]
+    #[error("Unable to parse CA certificate")]
     CaCertParseFailure,
 
     #[error("Certificate does not match private key")]
@@ -42,19 +42,19 @@ pub enum CcError {
     #[error("Unable to validate certificate")]
     CertValidationFailure,
 
-    #[error("Error while building new CSR Subject")]
+    #[error("Error while building new CSR (Certificate Signing Request) Subject")]
     CsrBuildSubjectFailure,
 
-    #[error("Error while building new Certificate Sign Request")]
+    #[error("Error while building new CSR (Certificate Signing Request)")]
     CsrBuildFailure,
 
-    #[error("CSR (certificat signing request) not signed by our private key CSR")]
+    #[error("CSR (Certificate Signing Request) not signed by our private key")]
     CsrSignedWithWrongKey,
 
-    #[error("CSR (certificat signing request) CommonName does not match client id")]
+    #[error("CSR (Certificate Signing Request) CommonName does not match client id")]
     CsrCommonNameMismatch,
 
-    #[error("Unable to validate CSR (certificat signing request)")]
+    #[error("Unable to validate CSR (Certificate Signing Request)")]
     CsrValidationFailure,
 
     // network.rs errors
