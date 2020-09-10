@@ -11,34 +11,39 @@ extern crate clap;
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
-use clap::{App, Arg};
+use clap::Arg;
 use log::{debug, error, info};
 use simple_logger::SimpleLogger;
-use std::fs::OpenOptions;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 /// Struct for `CertificateRequest`.
 struct CertificateRequest {
     server: String,
     client_id: String,
-    key_file_name: String,
-    csr_file_name: String,
-    crt_file_name: String,
-    ca_cert_file_name: String,
+    tls_dir: PathBuf,
+    key_file: PathBuf,
+    csr_file: PathBuf,
+    crt_file: PathBuf,
+    ca_cert_file: PathBuf,
 }
 
 /// Implement `CertificateRequest` handling.
 impl CertificateRequest {
-    pub fn new(server: &str, client_id: &str) -> CertificateRequest {
+    pub fn new(server: &str, client_id: &str, tls_dir: &str) -> CertificateRequest {
         CertificateRequest {
             server: server.to_string(),
             client_id: client_id.to_string(),
-            key_file_name: format!("{}{}", &client_id, ".key"),
-            csr_file_name: format!("{}{}", &client_id, ".csr"),
-            crt_file_name: format!("{}{}", &client_id, ".crt"),
-            ca_cert_file_name: format!("{}{}", &server, ".cacert"),
+            tls_dir: Path::new(&tls_dir).to_path_buf(),
+            key_file: Path::new(&tls_dir).join(&client_id).with_extension("key"),
+            csr_file: Path::new(&tls_dir).join(&client_id).with_extension("csr"),
+            crt_file: Path::new(&tls_dir).join(&client_id).with_extension("crt"),
+            ca_cert_file: Path::new(&tls_dir)
+                .join("certs")
+                .join(&server)
+                .with_extension("cacert"),
         }
     }
 
@@ -49,7 +54,7 @@ impl CertificateRequest {
     /// # Errors
     /// * `CcErrors` on CA certificate errors.
     pub fn ensure_cacert(&self) -> Result<(), CcError> {
-        let ca_path = Path::new(&self.ca_cert_file_name);
+        let ca_path = self.ca_cert_file.as_path();
 
         if !ca_path.exists() {
             info!(
@@ -77,6 +82,50 @@ impl CertificateRequest {
         certs::verify_cacert(&ca_data)
     }
 
+    /// Ensure that a local TLS directory exists.
+    ///
+    /// 1. Check if the requested TLS path exist.
+    /// 2. If the TLS path exists and is of type file return error.
+    /// 3. Since no TLS directory exists, create one and save to disk.
+    ///
+    /// # Errors
+    /// * `CcErrors::TlsDirectoryPointsToFile`          if TLS directory is a existing file.
+    /// * `CcErrors::TlsDirectoryCreationFailure`       if TLS directory cannot be created.
+    pub fn ensure_tls_dir(&self) -> Result<(), CcError> {
+        let dir_path = self.tls_dir.as_path();
+
+        if dir_path.exists() && !dir_path.is_dir() {
+            error!(
+                "Could not create TLS directory since TLS path: '{:?}' is a file",
+                &self.tls_dir
+            );
+            return Err(CcError::TlsDirectoryPointsToFile);
+        } else {
+            info!("TLS directory: {:?} does not exist, creating", &dir_path);
+
+            match create_dir_all(&dir_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Failed to create TLS directory: {}", e);
+                    return Err(CcError::TlsDirectoryCreationFailure);
+                }
+            }
+        }
+
+        // TODO create certs dir if not avaliable
+        let certs_path = dir_path.join("certs");
+        if !certs_path.exists() {
+            match create_dir_all(&dir_path.join("certs")) {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("Failed to create certs directory: {}", e);
+                    return Err(CcError::TlsDirectoryCreationFailure); // TODO add error
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Ensure that a local key exists in our key filename.
     ///
     /// 1. If no private key exists, create one and save to disk.
@@ -85,7 +134,7 @@ impl CertificateRequest {
     /// # Errors
     /// * `CcErrors` on private key errors.
     pub fn ensure_key(&self) -> Result<(), CcError> {
-        let key_path = Path::new(&self.key_file_name);
+        let key_path = self.key_file.as_path();
 
         if !key_path.exists() {
             info!("Private key file: {:?} does not exist, creating", &key_path);
@@ -114,9 +163,9 @@ impl CertificateRequest {
     /// # Errors
     /// * `CcErrors` on CSR errors.
     pub fn ensure_csr(&self) -> Result<(), CcError> {
-        let ca_path = Path::new(&self.ca_cert_file_name);
-        let csr_path = Path::new(&self.csr_file_name);
-        let key_path = Path::new(&self.key_file_name);
+        let ca_path = self.ca_cert_file.as_path();
+        let csr_path = self.csr_file.as_path();
+        let key_path = self.key_file.as_path();
 
         let key_data = std::fs::read(&key_path).unwrap();
         if !csr_path.exists() {
@@ -152,10 +201,10 @@ impl CertificateRequest {
     /// # Errors
     /// * `String` on errors.
     pub fn ensure_crt(&self) -> Result<(), String> {
-        let ca_path = Path::new(&self.ca_cert_file_name);
-        let crt_path = Path::new(&self.crt_file_name);
-        let csr_path = Path::new(&self.csr_file_name);
-        let key_path = Path::new(&self.key_file_name);
+        let ca_path = self.ca_cert_file.as_path();
+        let crt_path = self.crt_file.as_path();
+        let csr_path = self.csr_file.as_path();
+        let key_path = self.key_file.as_path();
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
@@ -211,15 +260,18 @@ impl CertificateRequest {
 fn certificate_request(
     server: &str,
     client_id: &str,
+    tls_dir: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!(
         "Using caramel server: '{}' with client_id: '{}'",
         server, client_id
     );
+    debug!("Using tls_dir: '{}'", tls_dir);
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id);
+    let request_info = CertificateRequest::new(&server, &client_id, &tls_dir);
 
+    request_info.ensure_tls_dir()?;
     request_info.ensure_key()?;
     request_info.ensure_cacert()?;
     request_info.ensure_csr()?;
@@ -227,10 +279,10 @@ fn certificate_request(
     Ok("Received certificate".into())
 }
 
-/// Parse the command line, returning `server`, and `client_id`, and `log_level`as tuple.
-///
-fn read_cmd_input() -> (String, String, log::LevelFilter) {
-    let matches = App::new(crate_description!())
+/// Parse the command line, returning a tuble with:
+/// `server`, `client_id`, `log_level`, `tls_dir`
+fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
+    let matches = clap::App::new(crate_description!())
         .author(crate_authors!())
         .version(crate_version!())
         .arg(
@@ -244,6 +296,13 @@ fn read_cmd_input() -> (String, String, log::LevelFilter) {
                 .help("Client_id to use")
                 .index(2)
                 .required(true),
+        )
+        .arg(
+            Arg::with_name("tls_dir")
+                .help("Directory for saving retrieved TLS files")
+                .short("d")
+                .long("dir")
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("verbosity")
@@ -260,6 +319,9 @@ fn read_cmd_input() -> (String, String, log::LevelFilter) {
 
     let client_id = matches.value_of("CLIENT_ID").unwrap().to_string();
     debug!("Using CLIENT_ID: {:?}", client_id);
+
+    let tls_dir = matches.value_of("tls_dir").unwrap_or(".").to_string();
+    debug!("Using tls_dir: {:?}", tls_dir);
 
     // Vary the output based on how many times the user used the "verbose" flag
     // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
@@ -280,7 +342,7 @@ fn read_cmd_input() -> (String, String, log::LevelFilter) {
         }
     }
 
-    (server, client_id, log_level)
+    (server, client_id, log_level, tls_dir)
 }
 
 /// `main` function of the caramel-client-rs.
@@ -288,15 +350,15 @@ fn read_cmd_input() -> (String, String, log::LevelFilter) {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (server, client_id, log_level) = read_cmd_input();
+    let (server, client_id, log_level, tls_dir) = read_cmd_input();
 
     SimpleLogger::new().with_level(log_level).init().unwrap();
     debug!(
-        "server: {} client_id={}, log_level={:?}",
-        server, client_id, log_level
+        "server: {} client_id={}, log_level={:?}, tls_dir={}",
+        server, client_id, log_level, tls_dir
     );
 
-    let res = certificate_request(&server, &client_id);
+    let res = certificate_request(&server, &client_id, &tls_dir);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());
