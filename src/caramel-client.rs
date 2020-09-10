@@ -17,6 +17,7 @@ use simple_logger::SimpleLogger;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 /// Struct for `CertificateRequest`.
@@ -27,12 +28,18 @@ struct CertificateRequest {
     key_file: PathBuf,
     csr_file: PathBuf,
     crt_file: PathBuf,
+    certificate_timeout: Duration,
     ca_cert_file: PathBuf,
 }
 
 /// Implement `CertificateRequest` handling.
 impl CertificateRequest {
-    pub fn new(server: &str, client_id: &str, tls_dir: &str) -> CertificateRequest {
+    pub fn new(
+        server: &str,
+        client_id: &str,
+        tls_dir: &str,
+        certificate_timeout: Duration,
+    ) -> CertificateRequest {
         CertificateRequest {
             server: server.to_string(),
             client_id: client_id.to_string(),
@@ -40,6 +47,7 @@ impl CertificateRequest {
             key_file: Path::new(&tls_dir).join(&client_id).with_extension("key"),
             csr_file: Path::new(&tls_dir).join(&client_id).with_extension("csr"),
             crt_file: Path::new(&tls_dir).join(&client_id).with_extension("crt"),
+            certificate_timeout,
             ca_cert_file: Path::new(&tls_dir)
                 .join("certs")
                 .join(&server)
@@ -208,7 +216,8 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data);
+        let res =
+            network::post_and_get_crt(&self.server, &ca_path, &csr_data, self.certificate_timeout);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
@@ -261,6 +270,7 @@ fn certificate_request(
     server: &str,
     client_id: &str,
     tls_dir: &str,
+    certificate_timeout: Duration,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!(
         "Using caramel server: '{}' with client_id: '{}'",
@@ -269,7 +279,7 @@ fn certificate_request(
     debug!("Using tls_dir: '{}'", tls_dir);
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id, &tls_dir);
+    let request_info = CertificateRequest::new(&server, &client_id, &tls_dir, certificate_timeout);
 
     request_info.ensure_tls_dir()?;
     request_info.ensure_key()?;
@@ -279,9 +289,15 @@ fn certificate_request(
     Ok("Received certificate".into())
 }
 
-/// Parse the command line, returning a tuble with:
-/// `server`, `client_id`, `log_level`, `tls_dir`
-fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
+/// Parse the command line, returning a tuple with:
+/// `server`, `client_id`, `log_level`, `tls_dir`, `certificate_timeout`
+fn read_cmd_input() -> (
+    String,
+    String,
+    log::LevelFilter,
+    String,
+    std::time::Duration,
+) {
     let matches = clap::App::new(crate_description!())
         .author(crate_authors!())
         .version(crate_version!())
@@ -305,6 +321,14 @@ fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("timeout")
+                .help("Timeout in seconds for waiting for certificate to be signed. Missing of 0 value means forever.")
+                .short("t")
+                .long("timeout")
+                .takes_value(true)
+                .default_value("0")
+        )
+        .arg(
             Arg::with_name("verbosity")
                 .help("Level of verbosity for debug traces")
                 .short("v")
@@ -322,6 +346,12 @@ fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
 
     let tls_dir = matches.value_of("tls_dir").unwrap_or(".").to_string();
     debug!("Using tls_dir: {:?}", tls_dir);
+
+    let certificate_timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
+    debug!(
+        "Using certificate timeout: {} seconds",
+        certificate_timeout.as_secs()
+    );
 
     // Vary the output based on how many times the user used the "verbose" flag
     // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
@@ -342,7 +372,7 @@ fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
         }
     }
 
-    (server, client_id, log_level, tls_dir)
+    (server, client_id, log_level, tls_dir, certificate_timeout)
 }
 
 /// `main` function of the caramel-client-rs.
@@ -350,15 +380,19 @@ fn read_cmd_input() -> (String, String, log::LevelFilter, String) {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (server, client_id, log_level, tls_dir) = read_cmd_input();
+    let (server, client_id, log_level, tls_dir, certificate_timeout) = read_cmd_input();
 
     SimpleLogger::new().with_level(log_level).init().unwrap();
     debug!(
-        "server: {} client_id={}, log_level={:?}, tls_dir={}",
-        server, client_id, log_level, tls_dir
+        "server: {} client_id={}, log_level={:?}, tls_dir={}, certificate_timeout={}",
+        server,
+        client_id,
+        log_level,
+        tls_dir,
+        certificate_timeout.as_secs()
     );
 
-    let res = certificate_request(&server, &client_id, &tls_dir);
+    let res = certificate_request(&server, &client_id, &tls_dir, certificate_timeout);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());
