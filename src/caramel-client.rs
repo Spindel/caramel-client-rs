@@ -5,9 +5,13 @@
 //!
 //! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
 
+#[macro_use]
+extern crate clap;
+
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
+use clap::{App, Arg};
 use log::{debug, error, info};
 use simple_logger::SimpleLogger;
 use std::fs::OpenOptions;
@@ -223,25 +227,60 @@ fn certificate_request(
     Ok("Received certificate".into())
 }
 
-/// Parse the command line, returning `server` and `client_id`.
+/// Parse the command line, returning `server`, and `client_id`, and `log_level`as tuple.
 ///
-/// # Errors
-/// * `String` if fails to parse the command line.
-fn read_cmd_input() -> Result<(String, String), String> {
-    let mut args: Vec<String> = std::env::args().collect();
+fn read_cmd_input() -> (String, String, log::LevelFilter) {
+    let matches = App::new(crate_description!())
+        .author(crate_authors!())
+        .version(crate_version!())
+        .arg(
+            Arg::with_name("SERVER")
+                .help("Caramel server to use")
+                .index(1)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("CLIENT_ID")
+                .help("Client_id to use")
+                .index(2)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("verbosity")
+                .help("Level of verbosity for debug traces")
+                .short("v")
+                .multiple(true),
+        )
+        .get_matches();
 
-    debug!("{:?}", args);
+    debug!("matches: {:?}", matches);
 
-    let length = args.len();
-    if length == 3 {
-        let client_id = args.pop().unwrap();
-        let server = args.pop().unwrap();
-        Ok((server, client_id))
-    } else {
-        let program = args.first().unwrap();
-        let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
-        Err(err_msg)
+    let server = matches.value_of("SERVER").unwrap().to_string();
+    debug!("Using SERVER: {:?}", server);
+
+    let client_id = matches.value_of("CLIENT_ID").unwrap().to_string();
+    debug!("Using CLIENT_ID: {:?}", client_id);
+
+    // Vary the output based on how many times the user used the "verbose" flag
+    // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
+    let log_level: log::LevelFilter;
+    match matches.occurrences_of("verbosity") {
+        0 => {
+            //debug!("Info and Error level");
+            //log_level = log::LevelFilter::Error
+            log_level = log::LevelFilter::Debug; // TODO Use Error as above
+        }
+        1 => {
+            debug!("Debug level");
+            log_level = log::LevelFilter::Debug
+        }
+        _ => {
+            debug!("Trace level");
+            log_level = log::LevelFilter::Trace
+        }
     }
+
+    (server, client_id, log_level)
 }
 
 /// `main` function of the caramel-client-rs.
@@ -249,12 +288,14 @@ fn read_cmd_input() -> Result<(String, String), String> {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    SimpleLogger::new()
-        .with_level(log::LevelFilter::Debug)
-        .init()
-        .unwrap();
+    let (server, client_id, log_level) = read_cmd_input();
 
-    let (server, client_id) = read_cmd_input()?;
+    SimpleLogger::new().with_level(log_level).init().unwrap();
+    debug!(
+        "server: {} client_id={}, log_level={:?}",
+        server, client_id, log_level
+    );
+
     let res = certificate_request(&server, &client_id);
 
     if res.is_err() {
