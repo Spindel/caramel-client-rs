@@ -269,22 +269,18 @@ impl CmdArgs {
             );
 
         let matches = app.get_matches_from_safe(args)?;
-        debug!("matches: {:?}", matches);
 
         let server = matches.value_of("SERVER").unwrap().to_string();
-        debug!("Using SERVER: {:?}", server);
 
         let client_id = matches.value_of("CLIENT_ID").unwrap().to_string();
-        debug!("Using CLIENT_ID: {:?}", client_id);
 
         // Vary the output based on how many times the user used the "verbose" flag
         // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
         let log_level: log::LevelFilter;
         match matches.occurrences_of("verbosity") {
             0 => {
-                //debug!("Info and Error level");
-                //log_level = log::LevelFilter::Error
-                log_level = log::LevelFilter::Debug; // TODO Use Error as above
+                debug!("Info and Error level");
+                log_level = log::LevelFilter::Error
             }
             1 => {
                 debug!("Debug level");
@@ -344,7 +340,7 @@ mod test {
     fn parse_optional(args_optional: &[&str]) -> CmdArgs {
         println!("args_optional {:?}", args_optional);
         let mut vec = Vec::with_capacity(10);
-        vec.extend_from_slice(&["execname", "server1", "client_id1"]);
+        vec.extend_from_slice(&["execname", "server_1", "client_id_1"]);
         vec.extend_from_slice(&args_optional);
         println!("vec {:?}", vec);
         CmdArgs::new_from(vec.iter()).unwrap()
@@ -368,7 +364,13 @@ mod test {
     }
 
     #[test]
-    fn test_command_parser_verbosity_double_v() {
+    fn test_command_parser_verbosity_default() {
+        let parse_result = parse_args(&["server_1", "client_id_1"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Error);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_single_v() {
         let parse_result = parse_optional(&["-v"]);
         assert_eq!(parse_result.log_level, log::LevelFilter::Debug);
     }
