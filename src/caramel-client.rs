@@ -233,6 +233,7 @@ fn certificate_request(
 struct CmdArgs {
     server: String,
     client_id: String,
+    log_level: log::LevelFilter,
 }
 
 impl CmdArgs {
@@ -259,6 +260,12 @@ impl CmdArgs {
                     .help("Caramel CLIENT_ID to use")
                     .index(2)
                     .required(true),
+            )
+            .arg(
+                Arg::with_name("verbosity")
+                    .help("Level of verbosity for debug traces")
+                    .short("v")
+                    .multiple(true),
             );
 
         let matches = app.get_matches_from_safe(args)?;
@@ -270,7 +277,30 @@ impl CmdArgs {
         let client_id = matches.value_of("CLIENT_ID").unwrap().to_string();
         debug!("Using CLIENT_ID: {:?}", client_id);
 
-        Ok(CmdArgs { server, client_id })
+        // Vary the output based on how many times the user used the "verbose" flag
+        // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
+        let log_level: log::LevelFilter;
+        match matches.occurrences_of("verbosity") {
+            0 => {
+                //debug!("Info and Error level");
+                //log_level = log::LevelFilter::Error
+                log_level = log::LevelFilter::Debug; // TODO Use Error as above
+            }
+            1 => {
+                debug!("Debug level");
+                log_level = log::LevelFilter::Debug
+            }
+            _ => {
+                debug!("Trace level");
+                log_level = log::LevelFilter::Trace
+            }
+        }
+
+        Ok(CmdArgs {
+            server,
+            client_id,
+            log_level,
+        })
     }
 }
 
@@ -282,7 +312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cmd_args = CmdArgs::new();
 
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Debug)
+        .with_level(cmd_args.log_level)
         .init()
         .unwrap();
     debug!("cmd_args: {:?}", cmd_args);
@@ -311,6 +341,15 @@ mod test {
         CmdArgs::new_from(vec.iter()).unwrap()
     }
 
+    fn parse_optional(args_optional: &[&str]) -> CmdArgs {
+        println!("args_optional {:?}", args_optional);
+        let mut vec = Vec::with_capacity(10);
+        vec.extend_from_slice(&["execname", "server1", "client_id1"]);
+        vec.extend_from_slice(&args_optional);
+        println!("vec {:?}", vec);
+        CmdArgs::new_from(vec.iter()).unwrap()
+    }
+
     #[test]
     fn test_command_parser_given_no_arguments_returns_too_few_arguments_error() {
         CmdArgs::new_from(["execname"].iter()).unwrap_err();
@@ -326,5 +365,23 @@ mod test {
     #[test]
     fn test_command_parser_given_no_client_id_returning_too_few_arguments_error() {
         CmdArgs::new_from(["execname", "server_1"].iter()).unwrap_err();
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_double_v() {
+        let parse_result = parse_optional(&["-v"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Debug);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_double_vv() {
+        let parse_result = parse_optional(&["-vv"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Trace);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_double_vvv() {
+        let parse_result = parse_optional(&["-vvv"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Trace);
     }
 }
