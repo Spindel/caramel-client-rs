@@ -36,11 +36,7 @@ crosscompile:
 
 .release: &release
   rules:
-    # Build containers & release when any of these files change
-    - changes:
-        - Dockerfile
-        - Makefile
-        - build.mk
+    # Build containers & release
     # Always build on tags
     - if: '$CI_COMMIT_TAG'
       when: on_success
@@ -57,7 +53,8 @@ crosscompile:
     - when: never
 
 
-# Compile a binary, uploading an artifact to the GitLab server
+# Compile a binary, uploading an artifact to the GitLab server. 
+# The name "release" is part of the public API for the repository, as it's part of the artifact-URL that gets downloaded. 
 release:
   <<: *release
   stage: build
@@ -83,9 +80,8 @@ release:container:
   <<: *release
   stage: deploy
   image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
-  needs:
-    - job: release
-      artifacts: true
+  dependencies:
+      - release
   script:
     - make login
     # Build the client container
