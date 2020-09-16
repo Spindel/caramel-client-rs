@@ -5,11 +5,16 @@
 //!
 //! See [Caramel Client project](https://gitlab.com/ModioAB/caramel-client-rs) on GitLab for more information.
 
+#[macro_use]
+extern crate clap;
+
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
+use clap::{App, Arg};
 use log::{debug, error, info};
 use simple_logger::SimpleLogger;
+use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
@@ -223,24 +228,75 @@ fn certificate_request(
     Ok("Received certificate".into())
 }
 
-/// Parse the command line, returning `server` and `client_id`.
-///
-/// # Errors
-/// * `String` if fails to parse the command line.
-fn read_cmd_input() -> Result<(String, String), String> {
-    let mut args: Vec<String> = std::env::args().collect();
+/// Implementation of parsing of the command line using clap
+#[derive(Debug, PartialEq)]
+struct CmdArgs {
+    server: String,
+    client_id: String,
+    log_level: log::LevelFilter,
+}
 
-    debug!("{:?}", args);
+impl CmdArgs {
+    fn new() -> Self {
+        Self::new_from(std::env::args_os()).unwrap_or_else(|e| e.exit())
+    }
 
-    let length = args.len();
-    if length == 3 {
-        let client_id = args.pop().unwrap();
-        let server = args.pop().unwrap();
-        Ok((server, client_id))
-    } else {
-        let program = args.first().unwrap();
-        let err_msg = format!("Usage: {} <SERVER> <CLIENTID>", program);
-        Err(err_msg)
+    fn new_from<I, T>(args: I) -> Result<Self, clap::Error>
+    where
+        I: Iterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let app = App::new(crate_description!())
+            .author(crate_authors!())
+            .version(crate_version!())
+            .arg(
+                Arg::with_name("SERVER")
+                    .help("Caramel SERVER to use")
+                    .index(1)
+                    .required(true),
+            )
+            .arg(
+                Arg::with_name("CLIENT_ID")
+                    .help("Caramel CLIENT_ID to use")
+                    .index(2)
+                    .required(true),
+            )
+            .arg(
+                Arg::with_name("verbosity")
+                    .help("Level of verbosity for debug traces")
+                    .short("v")
+                    .multiple(true),
+            );
+
+        let matches = app.get_matches_from_safe(args)?;
+
+        let server = matches.value_of("SERVER").unwrap().to_string();
+
+        let client_id = matches.value_of("CLIENT_ID").unwrap().to_string();
+
+        // Vary the output based on how many times the user used the "verbose" flag
+        // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
+        let log_level: log::LevelFilter;
+        match matches.occurrences_of("verbosity") {
+            0 => {
+                debug!("Info and Error level");
+                log_level = log::LevelFilter::Error
+            }
+            1 => {
+                debug!("Debug level");
+                log_level = log::LevelFilter::Debug
+            }
+            _ => {
+                debug!("Trace level");
+                log_level = log::LevelFilter::Trace
+            }
+        }
+
+        Ok(CmdArgs {
+            server,
+            client_id,
+            log_level,
+        })
     }
 }
 
@@ -249,13 +305,15 @@ fn read_cmd_input() -> Result<(String, String), String> {
 /// # Errors
 /// * `Error` if CA Certificate request fails.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cmd_args = CmdArgs::new();
+
     SimpleLogger::new()
-        .with_level(log::LevelFilter::Debug)
+        .with_level(cmd_args.log_level)
         .init()
         .unwrap();
+    debug!("cmd_args: {:?}", cmd_args);
 
-    let (server, client_id) = read_cmd_input()?;
-    let res = certificate_request(&server, &client_id);
+    let res = certificate_request(&cmd_args.server, &cmd_args.client_id);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());
@@ -263,5 +321,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         info!("Certificate success");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn parse_args(args: &[&str]) -> CmdArgs {
+        println!("args {:?}", args);
+        let mut vec = Vec::with_capacity(10);
+        vec.extend_from_slice(&["execname"]);
+        vec.extend_from_slice(&args);
+        println!("vec {:?}", vec);
+        CmdArgs::new_from(vec.iter()).unwrap()
+    }
+
+    fn parse_optional(args_optional: &[&str]) -> CmdArgs {
+        println!("args_optional {:?}", args_optional);
+        let mut vec = Vec::with_capacity(10);
+        vec.extend_from_slice(&["execname", "server_1", "client_id_1"]);
+        vec.extend_from_slice(&args_optional);
+        println!("vec {:?}", vec);
+        CmdArgs::new_from(vec.iter()).unwrap()
+    }
+
+    #[test]
+    fn test_command_parser_given_no_arguments_returns_too_few_arguments_error() {
+        CmdArgs::new_from(["execname"].iter()).unwrap_err();
+    }
+
+    #[test]
+    fn test_command_parser_given_mandatory_arguments_server_and_client_id() {
+        let parse_result = parse_args(&["server_1", "client_id_1"]);
+        assert_eq!(parse_result.server, "server_1");
+        assert_eq!(parse_result.client_id, "client_id_1");
+    }
+
+    #[test]
+    fn test_command_parser_given_no_client_id_returning_too_few_arguments_error() {
+        CmdArgs::new_from(["execname", "server_1"].iter()).unwrap_err();
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_default() {
+        let parse_result = parse_args(&["server_1", "client_id_1"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Error);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_single_v() {
+        let parse_result = parse_optional(&["-v"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Debug);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_double_vv() {
+        let parse_result = parse_optional(&["-vv"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Trace);
+    }
+
+    #[test]
+    fn test_command_parser_verbosity_double_vvv() {
+        let parse_result = parse_optional(&["-vvv"]);
+        assert_eq!(parse_result.log_level, log::LevelFilter::Trace);
     }
 }
