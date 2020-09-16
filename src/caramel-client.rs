@@ -29,12 +29,12 @@ struct CertificateRequest {
     csr_file_name: String,
     crt_file_name: String,
     ca_cert_file_name: String,
-    certificate_timeout: Duration,
+    timeout: Duration,
 }
 
 /// Implement `CertificateRequest` handling.
 impl CertificateRequest {
-    pub fn new(server: &str, client_id: &str, certificate_timeout: Duration) -> CertificateRequest {
+    pub fn new(server: &str, client_id: &str, timeout: Duration) -> CertificateRequest {
         CertificateRequest {
             server: server.to_string(),
             client_id: client_id.to_string(),
@@ -42,7 +42,7 @@ impl CertificateRequest {
             csr_file_name: format!("{}{}", &client_id, ".csr"),
             crt_file_name: format!("{}{}", &client_id, ".crt"),
             ca_cert_file_name: format!("{}{}", &server, ".cacert"),
-            certificate_timeout,
+            timeout,
         }
     }
 
@@ -163,8 +163,7 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res =
-            network::post_and_get_crt(&self.server, &ca_path, &csr_data, self.certificate_timeout);
+        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data, self.timeout);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
@@ -216,7 +215,7 @@ impl CertificateRequest {
 fn certificate_request(
     server: &str,
     client_id: &str,
-    certificate_timeout: Duration,
+    timeout: Duration,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!(
         "Using caramel server: '{}' with client_id: '{}'",
@@ -224,7 +223,7 @@ fn certificate_request(
     );
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id, certificate_timeout);
+    let request_info = CertificateRequest::new(&server, &client_id, timeout);
 
     request_info.ensure_key()?;
     request_info.ensure_cacert()?;
@@ -239,7 +238,7 @@ struct CmdArgs {
     server: String,
     client_id: String,
     log_level: log::LevelFilter,
-    certificate_timeout: std::time::Duration,
+    timeout: std::time::Duration,
 }
 
 impl CmdArgs {
@@ -306,13 +305,13 @@ impl CmdArgs {
             }
         }
 
-        let certificate_timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
+        let timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
 
         Ok(CmdArgs {
             server,
             client_id,
             log_level,
-            certificate_timeout,
+            timeout,
         })
     }
 }
@@ -330,11 +329,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     debug!("cmd_args: {:?}", cmd_args);
 
-    let res = certificate_request(
-        &cmd_args.server,
-        &cmd_args.client_id,
-        cmd_args.certificate_timeout,
-    );
+    let res = certificate_request(&cmd_args.server, &cmd_args.client_id, cmd_args.timeout);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());

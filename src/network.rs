@@ -375,7 +375,7 @@ pub fn post_and_get_crt(
     server: &str,
     ca_cert: &Path,
     csr_data: &[u8],
-    certificate_timeout: Duration,
+    timeout: Duration,
 ) -> Result<CertState, CcError> {
     use std::thread::sleep;
 
@@ -390,20 +390,22 @@ pub fn post_and_get_crt(
         attempt += 1;
 
         debug!(
-            "attempt: {} total_time: {} ms certificate_timeout: {} ms",
+            "attempt: {} total_time: {} ms timeout: {} ms",
             attempt,
             total_time.as_millis(),
-            certificate_timeout.as_millis()
+            timeout.as_millis()
         );
 
         // TODO change to !certificate_timeout.is_zero() when Duration::is_zero() is available as stable
         // https://github.com/rust-lang/rust/issues/73544
-        if certificate_timeout.as_secs() > 0 && total_time / 1000 > certificate_timeout {
+        if timeout.as_secs() > 0 && total_time.as_secs() > timeout.as_secs() {
             error!(
-                "CRT request failed due to timeout {:?}",
-                certificate_timeout
+                "CRT request failed due to timeout passed, total_time spent {} seconds",
+                total_time.as_secs()
             );
-            return Err(CcError::CrtTimeout(certificate_timeout.as_secs()));
+            return Err(CcError::CrtTimeout {
+                total_time: total_time.as_secs(),
+            });
         }
 
         let get_res = curl_get_crt(&mut handle, &url)?;
