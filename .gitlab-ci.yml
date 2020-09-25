@@ -34,7 +34,7 @@ crosscompile:
     - cargo build --target x86_64-unknown-linux-musl
     - cargo build --target armv7-unknown-linux-gnueabihf
 
-.release: &release
+.release:
   rules:
     # Build containers & release
     # Always build on tags
@@ -56,7 +56,7 @@ crosscompile:
 # Compile a binary, uploading an artifact to the GitLab server. 
 # The name "release" is part of the public API for the repository, as it's part of the artifact-URL that gets downloaded. 
 release:
-  <<: *release
+  extends: .release
   stage: build
   script:
     - cargo build --release --target x86_64-unknown-linux-gnu
@@ -77,7 +77,7 @@ release:
 
 # This builds the "client" container that others can use to run the application.
 release:container:
-  <<: *release
+  extends: .release
   stage: deploy
   image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
   dependencies:
@@ -88,7 +88,7 @@ release:container:
     - make -f Makefile build-publish
 
 
-.rebase: &rebase
+.rebase:
   stage: build
   allow_failure: true
   needs:
@@ -119,28 +119,28 @@ release:container:
 # Split check & fmt as two different jobs only so that we don't error early in
 # case one of them fails
 rebase:check:
-  <<: *rebase
+  extends: .rebase
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
       -x 'cargo check'
 
 rebase:fmt:
-  <<: *rebase
+  extends: .rebase
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
       -x 'cargo fmt -- --check'
 
 rebase:clippy:
-  <<: *rebase
+  extends: .rebase
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
       -x 'cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo'
 
 rebase:doc:
-  <<: *rebase
+  extends: .rebase
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
