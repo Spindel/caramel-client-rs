@@ -87,6 +87,24 @@ release:container:
     # Build the client container
     - make -f Makefile build-publish
 
+release:upload:
+  extends: .release
+  stage: deploy
+  dependencies:
+    - release
+  variables:
+    VERSION: "${CI_COMMIT_REF_SLUG}"
+    X86_DYNAMIC: "x86_64-unknown-linux-gnu"
+    X86_STATIC: "x86_64-unknown-linux-musl"
+    ARMV7_DYNAMIC: "armv7-unknown-linux-gnueabihf"
+    PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/caramel-client-test/"
+  script:
+    - ARCH=${ARMV7_DYNAMIC} FILE="caramel-client-rs" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
+    - ARCH=${X86_DYNAMIC}   FILE="caramel-client-rs" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
+    - ARCH=${X86_STATIC}    FILE="caramel-client-rs" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
+    - ARCH=${ARMV7_DYNAMIC} FILE="caramel-client-rs.sha256" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
+    - ARCH=${X86_DYNAMIC}   FILE="caramel-client-rs.sha256" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
+    - ARCH=${X86_STATIC}    FILE="caramel-client-rs.sha256" curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${VERSION}/${ARCH}-${FILE}"
 
 .rebase:
   stage: build
