@@ -14,6 +14,7 @@ stages:
   - test
   - build
   - deploy
+  - release
 
 # Use cargo to test the project
 test:cargo:
@@ -53,8 +54,8 @@ crosscompile:
     - when: never
 
 
-# Compile a binary, uploading an artifact to the GitLab server. 
-# The name "release" is part of the public API for the repository, as it's part of the artifact-URL that gets downloaded. 
+# Compile a binary, uploading an artifact to the GitLab server.
+# The name "release" is part of the public API for the repository, as it's part of the artifact-URL that gets downloaded.
 release:
   extends: .release
   stage: build
@@ -87,6 +88,41 @@ release:container:
     # Build the client container
     - make -f Makefile build-publish
 
+.relvars:
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    X86_DYNAMIC: "x86_64-unknown-linux-gnu"
+    X86_STATIC: "x86_64-unknown-linux-musl"
+    ARMV7_DYNAMIC: "armv7-unknown-linux-gnueabihf"
+    PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/caramel-client-test/${CI_COMMIT_TAG}"
+
+release:upload:
+  extends: .relvars
+  image: curlimages/curl:latest
+  stage: deploy
+  dependencies:
+    - release
+  script:
+    - |
+      for ARCH in ${X86_DYNAMIC} ${X86_STATIC} ${ARMV7_DYNAMIC};
+      do
+        for FILE in caramel-client-rs caramel-client-rs.sha256;
+        do
+          curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "target/${ARCH}/release/${FILE}" "${PACKAGE_REGISTRY_URL}/${ARCH}-${FILE}"
+        done
+      done
+
+release:final:
+  extends: .relvars
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  script:
+    - |
+      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+                  --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${X86_STATIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${X86_STATIC}-caramel-client-rs\"   }" \
+                  --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${X86_DYNAMIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${X86_DYNAMIC}-caramel-client-rs\" }" \
+                  --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${ARMV7_DYNAMIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${ARMV7_DYNAMIC}-caramel-client-rs\"}"
 
 .rebase:
   stage: build
