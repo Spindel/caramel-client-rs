@@ -105,10 +105,10 @@ impl CertificateRequest {
 
         if dir_path.exists() && !dir_path.is_dir() {
             error!(
-                "Could not create TLS directory since TLS path: '{:?}' is a file",
+                "Could not create TLS directory since TLS path: '{:?}' is not a directory",
                 &self.tls_dir
             );
-            return Err(CcError::TlsDirectoryPointsToFile);
+            return Err(CcError::TlsDirectoryNotDirectory);
         } else {
             info!("TLS directory: {:?} does not exist, creating", &dir_path);
 

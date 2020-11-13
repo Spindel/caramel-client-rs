@@ -21,8 +21,8 @@ pub enum CcError {
     )]
     PrivateKeyTooShort { actual: u32 },
 
-    #[error("Could not create TLS directory since provided dir path points to a file")]
-    TlsDirectoryPointsToFile,
+    #[error("Could not create TLS directory since provided dir path is not a directory")]
+    TlsDirectoryNotDirectory,
 
     #[error("Could not create provided TLS directory path")]
     TlsDirectoryCreationFailure,
