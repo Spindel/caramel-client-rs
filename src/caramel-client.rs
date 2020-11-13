@@ -11,13 +11,14 @@ extern crate clap;
 use caramel_client::certs;
 use caramel_client::network;
 use caramel_client::CcError;
-use clap::{App, Arg};
+use clap::Arg;
 use log::{debug, error, info};
 use simple_logger::SimpleLogger;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
+use std::time::Duration;
 
 //-----------------------------     Certificate crunch     ---------------------------------------------
 /// Struct for `CertificateRequest`.
@@ -28,11 +29,12 @@ struct CertificateRequest {
     csr_file_name: String,
     crt_file_name: String,
     ca_cert_file_name: String,
+    timeout: Duration,
 }
 
 /// Implement `CertificateRequest` handling.
 impl CertificateRequest {
-    pub fn new(server: &str, client_id: &str) -> CertificateRequest {
+    pub fn new(server: &str, client_id: &str, timeout: Duration) -> CertificateRequest {
         CertificateRequest {
             server: server.to_string(),
             client_id: client_id.to_string(),
@@ -40,6 +42,7 @@ impl CertificateRequest {
             csr_file_name: format!("{}{}", &client_id, ".csr"),
             crt_file_name: format!("{}{}", &client_id, ".crt"),
             ca_cert_file_name: format!("{}{}", &server, ".cacert"),
+            timeout,
         }
     }
 
@@ -160,7 +163,7 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data);
+        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data, self.timeout);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
@@ -212,6 +215,7 @@ impl CertificateRequest {
 fn certificate_request(
     server: &str,
     client_id: &str,
+    timeout: Duration,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!(
         "Using caramel server: '{}' with client_id: '{}'",
@@ -219,7 +223,7 @@ fn certificate_request(
     );
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id);
+    let request_info = CertificateRequest::new(&server, &client_id, timeout);
 
     request_info.ensure_key()?;
     request_info.ensure_cacert()?;
@@ -234,6 +238,7 @@ struct CmdArgs {
     server: String,
     client_id: String,
     log_level: log::LevelFilter,
+    timeout: std::time::Duration,
 }
 
 impl CmdArgs {
@@ -246,7 +251,7 @@ impl CmdArgs {
         I: Iterator<Item = T>,
         T: Into<OsString> + Clone,
     {
-        let app = App::new(crate_description!())
+        let app = clap::App::new(crate_description!())
             .author(crate_authors!())
             .version(crate_version!())
             .arg(
@@ -266,6 +271,14 @@ impl CmdArgs {
                     .help("Level of verbosity for debug traces")
                     .short("v")
                     .multiple(true),
+            )
+            .arg(
+                Arg::with_name("timeout")
+                    .help("Timeout in seconds for waiting for certificate to be signed. Missing of 0 value means forever.")
+                    .short("t")
+                    .long("timeout")
+                    .takes_value(true)
+                    .default_value("0")
             );
 
         let matches = app.get_matches_from_safe(args)?;
@@ -292,10 +305,13 @@ impl CmdArgs {
             }
         }
 
+        let timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
+
         Ok(CmdArgs {
             server,
             client_id,
             log_level,
+            timeout,
         })
     }
 }
@@ -313,7 +329,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
     debug!("cmd_args: {:?}", cmd_args);
 
-    let res = certificate_request(&cmd_args.server, &cmd_args.client_id);
+    let res = certificate_request(&cmd_args.server, &cmd_args.client_id, cmd_args.timeout);
 
     if res.is_err() {
         eprintln!("{}", res.unwrap_err().to_string());

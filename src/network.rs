@@ -9,6 +9,7 @@ use curl::easy::Easy;
 use log::{debug, error, info, warn};
 use rand::prelude::*;
 use std::path::Path;
+use std::time::Duration;
 
 use crate::CcError;
 
@@ -338,7 +339,6 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
 fn calculate_backoff(count: usize) -> std::time::Duration {
     use std::cmp::{max, min};
     use std::convert::TryInto;
-    use std::time::Duration;
     // Note, this could be improved by adding a jitter to it
     // https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
 
@@ -375,6 +375,7 @@ pub fn post_and_get_crt(
     server: &str,
     ca_cert: &Path,
     csr_data: &[u8],
+    timeout: Duration,
 ) -> Result<CertState, CcError> {
     use std::thread::sleep;
 
@@ -384,13 +385,35 @@ pub fn post_and_get_crt(
     let mut handle = curl_get_handle(&server, &ca_cert)?;
 
     let mut attempt = 0;
+    let mut total_time = Duration::new(0, 0);
     loop {
         attempt += 1;
+
+        debug!(
+            "attempt: {} total_time: {} ms timeout: {} ms",
+            attempt,
+            total_time.as_millis(),
+            timeout.as_millis()
+        );
+
+        // TODO change to !certificate_timeout.is_zero() when Duration::is_zero() is available as stable
+        // https://github.com/rust-lang/rust/issues/73544
+        if timeout.as_secs() > 0 && total_time.as_secs() > timeout.as_secs() {
+            error!(
+                "CRT request failed due to timeout passed, total_time spent {} seconds",
+                total_time.as_secs()
+            );
+            return Err(CcError::CrtTimeout {
+                total_time: total_time.as_secs(),
+            });
+        }
+
         let get_res = curl_get_crt(&mut handle, &url)?;
         match inner_get_crt(&url, get_res) {
             // Pending, We sleep for a bit and try again
             Ok(CertState::Pending) => {
                 let delay = calculate_backoff(attempt);
+                total_time += delay;
                 info!("Request pending. Sleeping for {:?}", delay);
                 sleep(delay);
             }
