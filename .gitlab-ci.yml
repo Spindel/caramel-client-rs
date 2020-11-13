@@ -3,10 +3,9 @@
 # Copyright 2020 Modio AB
 
 default:
-  # We use a slightly modified `rust:buster` image
-  # See Dockerfile.build for details on what this image does differently compared
-  # to upstream `rust:buster` container
-  image: registry.gitlab.com/modioab/caramel-client-rs/build:master
+  # We use a slightly modified `rust:latest` image
+  # See https://gitlab.com/ModioAB/base-image/-/tree/master/rust  for details
+  image: registry.gitlab.com/modioab/base-image/debian/rust:master
 
 .build-container:
   image: registry.gitlab.com/modioab/base-image/fedora-33/container:master
@@ -59,7 +58,8 @@ crosscompile:
 
 
 # Compile a binary, uploading an artifact to the GitLab server.
-# The name "release" is part of the public API for the repository, as it's part of the artifact-URL that gets downloaded.
+# The name "release" is part of the public API for the repository, as it's part
+# of the artifact-URL that gets downloaded.
 release:
   extends: .release
   stage: build
@@ -156,36 +156,22 @@ release:final:
     - git config --global user.email "ci@localhost"
     - git config --global user.name "CI System"
 
+  parallel:
+    matrix:
+      - RUN_COMMAND:
+          - cargo check
+          - cargo fmt -- --check
+          - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
+          - cargo doc --no-deps -p caramel-client
 
 # Split check & fmt as two different jobs only so that we don't error early in
 # case one of them fails
-rebase:check:
+rebase:
   extends: .rebase
   script:
     - git rebase --rebase-merges --autosquash origin/master
       -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo check'
-
-rebase:fmt:
-  extends: .rebase
-  script:
-    - git rebase --rebase-merges --autosquash origin/master
-      -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo fmt -- --check'
-
-rebase:clippy:
-  extends: .rebase
-  script:
-    - git rebase --rebase-merges --autosquash origin/master
-      -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo'
-
-rebase:doc:
-  extends: .rebase
-  script:
-    - git rebase --rebase-merges --autosquash origin/master
-      -x 'git --no-pager log --oneline --max-count=1'
-      -x 'cargo doc --no-deps -p caramel-client'
+      -x '${RUN_COMMAND}'
 
 
 # This is to publish the documentation to external site
@@ -205,30 +191,3 @@ pages:
   artifacts:
     paths:
       - public
-
-
-# This build the "build" container
-container:build:
-  stage: build
-  extends: .build-container
-  rules:
-    # Build when any of these files change
-    - changes:
-        - Dockerfile.build
-        - Makefile.build
-        - build.mk
-    # Always build from scheduled builds
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_success
-    # Allow users to _manually_ build this from merge-requests in cases.
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      # If it's not tagged as "allow_failure", it will block the merge request
-      # pipelines
-      allow_failure: true
-      when: manual
-    # Do not build on other conditions
-    - when: never
-  script:
-    - make login
-    # Build the dev containers
-    - make -f Makefile.build build-publish
