@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 # Copyright 2020 Modio AB
 
-# We use a slightly modified `rust:buster` image
-# See Dockerfile.build for details on what this image does differently compared
-# to upstream `rust:buster` container
-image: registry.gitlab.com/modioab/caramel-client-rs/build:master
+default:
+  # We use a slightly modified `rust:buster` image
+  # See Dockerfile.build for details on what this image does differently compared
+  # to upstream `rust:buster` container
+  image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
 include:
   - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
