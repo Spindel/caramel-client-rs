@@ -9,7 +9,7 @@ default:
   image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
 .build-container:
-  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  image: registry.gitlab.com/modioab/base-image/fedora-33/container:master
 
 include:
   - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
