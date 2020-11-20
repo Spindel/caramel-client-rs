@@ -8,6 +8,9 @@ default:
   # to upstream `rust:buster` container
   image: registry.gitlab.com/modioab/caramel-client-rs/build:master
 
+.build-container:
+  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+
 include:
   - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
 
@@ -79,11 +82,12 @@ release:
 
 # This builds the "client" container that others can use to run the application.
 release:container:
-  extends: .release
+  extends:
+    - .release
+    - .build-container
   stage: deploy
-  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
   dependencies:
-      - release
+    - release
   script:
     - make login
     # Build the client container
@@ -206,7 +210,7 @@ pages:
 # This build the "build" container
 container:build:
   stage: build
-  image: registry.gitlab.com/modioab/base-image/fedora-31/container:master
+  extends: .build-container
   rules:
     # Build when any of these files change
     - changes:
