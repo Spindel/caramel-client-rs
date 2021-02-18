@@ -109,15 +109,14 @@ impl CertificateRequest {
                 &self.tls_dir
             );
             return Err(CcError::TlsDirectoryNotDirectory);
-        } else {
-            info!("TLS directory: {:?} does not exist, creating", &dir_path);
+        }
+        info!("TLS directory: {:?} does not exist, creating", &dir_path);
 
-            match create_dir_all(&dir_path) {
-                Ok(c) => c,
-                Err(e) => {
-                    error!("Failed to create TLS directory: {}", e);
-                    return Err(CcError::TlsDirectoryCreationFailure);
-                }
+        match create_dir_all(&dir_path) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to create TLS directory: {}", e);
+                return Err(CcError::TlsDirectoryCreationFailure);
             }
         }
 
@@ -387,7 +386,7 @@ impl CmdArgs {
 ///
 /// # Errors
 /// * `Error` if CA Certificate request fails.
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     let cmd_args = CmdArgs::new();
 
     SimpleLogger::new()
@@ -408,7 +407,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     } else {
         info!("Certificate success");
-        Ok(())
     }
 }
 
