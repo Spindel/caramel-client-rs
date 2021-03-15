@@ -23,6 +23,7 @@ stages:
 test:cargo:
   script:
     - rustc --version && cargo --version  # Print version info for debugging
+    - cargo build --workspace --tests  # compile first, without verbose
     - cargo test --workspace --verbose
 
 lint:
