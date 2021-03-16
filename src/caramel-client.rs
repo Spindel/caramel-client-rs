@@ -25,7 +25,6 @@ use std::time::Duration;
 struct CertificateRequest {
     server: String,
     client_id: String,
-    tls_dir: PathBuf,
     key_file: PathBuf,
     csr_file: PathBuf,
     crt_file: PathBuf,
@@ -38,20 +37,16 @@ impl CertificateRequest {
     pub fn new(
         server: &str,
         client_id: &str,
-        tls_dir: &str,
+        paths: CertPaths,
         timeout: Duration,
     ) -> CertificateRequest {
-        CertificateRequest {
+        Self {
             server: server.to_string(),
             client_id: client_id.to_string(),
-            tls_dir: Path::new(&tls_dir).to_path_buf(),
-            key_file: Path::new(&tls_dir).join(&client_id).with_extension("key"),
-            csr_file: Path::new(&tls_dir).join(&client_id).with_extension("csr"),
-            crt_file: Path::new(&tls_dir).join(&client_id).with_extension("crt"),
-            ca_cert_file: Path::new(&tls_dir)
-                .join("certs")
-                .join(&server)
-                .with_extension("cacert"),
+            key_file: paths.key_path,
+            csr_file: paths.csr_path,
+            crt_file: paths.crt_path,
+            ca_cert_file: paths.ca_cert_path,
             timeout,
         }
     }
@@ -91,6 +86,26 @@ impl CertificateRequest {
         certs::verify_cacert(&ca_data)
     }
 
+    /// Drop the "file part from the path `file`, and ensure that the section leading up to the
+    /// file exists.
+    ///
+    /// Similar to unix `mkdir -p "$(dirname $file)"`
+    fn ensure_file_dir(file: &Path) -> Result<(), CcError> {
+        match file.parent() {
+            None => {
+                error!("No parent exists for file: {}", file.display());
+                Err(CcError::TlsDirectoryNotDirectory)
+            }
+            Some(parent) => match create_dir_all(parent) {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    error!("Failed to create directory: '{}',  {}", parent.display(), e);
+                    Err(CcError::TlsDirectoryCreationFailure)
+                }
+            },
+        }
+    }
+
     /// Ensure that a local TLS directory exists.
     ///
     /// 1. Check if the requested TLS path exist.
@@ -101,36 +116,10 @@ impl CertificateRequest {
     /// * `CcErrors::TlsDirectoryPointsToFile`          if TLS directory is not a director.
     /// * `CcErrors::TlsDirectoryCreationFailure`       if TLS directory cannot be created.
     pub fn ensure_tls_dir(&self) -> Result<(), CcError> {
-        let dir_path = self.tls_dir.as_path();
-
-        if dir_path.exists() && !dir_path.is_dir() {
-            error!(
-                "Could not create TLS directory since TLS path: '{:?}' is not a directory",
-                &self.tls_dir
-            );
-            return Err(CcError::TlsDirectoryNotDirectory);
-        }
-        info!("TLS directory: {:?} does not exist, creating", &dir_path);
-
-        match create_dir_all(&dir_path) {
-            Ok(c) => c,
-            Err(e) => {
-                error!("Failed to create TLS directory: {}", e);
-                return Err(CcError::TlsDirectoryCreationFailure);
-            }
-        }
-
-        // TODO create certs dir if not avaliable
-        let certs_path = dir_path.join("certs");
-        if !certs_path.exists() {
-            match create_dir_all(&dir_path.join("certs")) {
-                Ok(c) => c,
-                Err(e) => {
-                    error!("Failed to create certs directory: {}", e);
-                    return Err(CcError::TlsDirectoryCreationFailure); // TODO add error
-                }
-            }
-        }
+        Self::ensure_file_dir(&self.ca_cert_file)?;
+        Self::ensure_file_dir(&self.key_file)?;
+        Self::ensure_file_dir(&self.csr_file)?;
+        Self::ensure_file_dir(&self.crt_file)?;
         Ok(())
     }
 
@@ -261,6 +250,75 @@ impl CertificateRequest {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct CertPaths {
+    ca_cert_path: PathBuf,
+    key_path: PathBuf,
+    csr_path: PathBuf,
+    crt_path: PathBuf,
+}
+
+/// Take some optional configuration and turn it to non-optional paths
+///
+/// Uses:  `server`, `client_id`  to generate default paths
+/// Optionals:  Passed in as Option, will either be consumed or created.
+///
+/// Failure:  Does not fail.
+impl CertPaths {
+    fn resolve(
+        server: &str,
+        client_id: &str,
+        tls_dir: Option<String>,
+        key_path: Option<String>,
+        csr_path: Option<String>,
+        crt_path: Option<String>,
+        ca_cert_path: Option<String>,
+    ) -> CertPaths {
+        let cwd = match tls_dir {
+            Some(s) => PathBuf::from(s),
+            None => PathBuf::from("."),
+        };
+        // "server" and "client" will contain "."
+        // Rust lacks an "add_extension" method for Path and PathBuf, and only has "with_extension"
+        // or "set_extension".
+        // Therefore, we append a ".tmp" to our temporary files, and then let the standard library
+        // adjust the paths.
+        let server_tmp = format!("{}.tmp", server);
+        let client_tmp = format!("{}.tmp", client_id);
+        debug!("Using root dir: {}", cwd.display());
+
+        let key_path = match key_path {
+            Some(s) => PathBuf::from(s),
+            None => cwd.join(&client_tmp).with_extension("key"),
+        };
+        info!("Using key path: {}", key_path.display());
+
+        let csr_path = match csr_path {
+            Some(s) => PathBuf::from(s),
+            None => cwd.join(&client_tmp).with_extension("csr"),
+        };
+        info!("Using csr path: {}", csr_path.display());
+
+        let crt_path = match crt_path {
+            Some(s) => PathBuf::from(s),
+            None => cwd.join(&client_tmp).with_extension("crt"),
+        };
+        info!("Using Certificate path: {}", crt_path.display());
+
+        let ca_cert_path = match ca_cert_path {
+            Some(s) => PathBuf::from(s),
+            None => cwd.join("certs").join(&server_tmp).with_extension("cacert"),
+        };
+        info!("Using CA Certificate path: {}", ca_cert_path.display());
+        Self {
+            ca_cert_path,
+            key_path,
+            csr_path,
+            crt_path,
+        }
+    }
+}
+
 /// Send a Certificate Request to server.
 ///
 /// # Errors
@@ -268,17 +326,16 @@ impl CertificateRequest {
 fn certificate_request(
     server: &str,
     client_id: &str,
-    tls_dir: &str,
+    paths: CertPaths,
     timeout: Duration,
 ) -> Result<String, Box<dyn std::error::Error>> {
     info!(
         "Using caramel server: '{}' with client_id: '{}'",
         server, client_id
     );
-    debug!("Using tls_dir: '{}'", tls_dir);
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id, &tls_dir, timeout);
+    let request_info = CertificateRequest::new(&server, &client_id, paths, timeout);
 
     request_info.ensure_tls_dir()?;
     request_info.ensure_key()?;
@@ -295,7 +352,11 @@ struct CmdArgs {
     client_id: String,
     log_level: log::LevelFilter,
     timeout: std::time::Duration,
-    tls_dir: String,
+    tls_dir: Option<String>,
+    cacert_path: Option<String>,
+    cert_path: Option<String>,
+    key_path: Option<String>,
+    csr_path: Option<String>,
 }
 
 impl CmdArgs {
@@ -342,6 +403,26 @@ impl CmdArgs {
                     .short("d")
                     .long("dir")
                     .takes_value(true),
+            ).arg(
+                Arg::with_name("key_path")
+                    .help("Full path of Private Key file")
+                    .long("key-path")
+                    .takes_value(true),
+            ).arg(
+                Arg::with_name("csr_path")
+                    .help("Full path of CSR file")
+                    .long("csr-path")
+                    .takes_value(true),
+            ).arg(
+                Arg::with_name("cert_path")
+                    .help("Full path of Certificate")
+                    .long("cert-path")
+                    .takes_value(true),
+            ).arg(
+                Arg::with_name("cacert_path")
+                    .help("Full path of CA Certificate")
+                    .long("cacert-path")
+                    .takes_value(true),
             );
 
         let matches = app.get_matches_from_safe(args)?;
@@ -369,15 +450,23 @@ impl CmdArgs {
         }
 
         let timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
-        let tls_dir = matches.value_of("tls_dir").unwrap_or(".").to_string();
-        debug!("Using tls_dir: {:?}", tls_dir);
 
+        // clap has references to argv, and we want the result to be owned strings.
+        let tls_dir = matches.value_of("tls_dir").map(str::to_string);
+        let key_path = matches.value_of("key_path").map(str::to_string);
+        let csr_path = matches.value_of("csr_path").map(str::to_string);
+        let cert_path = matches.value_of("cert_path").map(str::to_string);
+        let cacert_path = matches.value_of("cacert_path").map(str::to_string);
         Ok(CmdArgs {
             server,
             client_id,
             log_level,
             timeout,
             tls_dir,
+            key_path,
+            csr_path,
+            cert_path,
+            cacert_path,
         })
     }
 }
@@ -395,10 +484,20 @@ fn main() {
         .unwrap();
     debug!("cmd_args: {:?}", cmd_args);
 
+    let paths = CertPaths::resolve(
+        &cmd_args.server,
+        &cmd_args.client_id,
+        cmd_args.tls_dir,
+        cmd_args.key_path,
+        cmd_args.csr_path,
+        cmd_args.cert_path,
+        cmd_args.cacert_path,
+    );
+
     let res = certificate_request(
         &cmd_args.server,
         &cmd_args.client_id,
-        &cmd_args.tls_dir,
+        paths,
         cmd_args.timeout,
     );
 
@@ -471,5 +570,60 @@ mod test {
     fn test_command_parser_verbosity_double_vvv() {
         let parse_result = parse_optional(&["-vvv"]);
         assert_eq!(parse_result.log_level, log::LevelFilter::Trace);
+    }
+
+    #[test]
+    fn test_path_resolve_all_none() {
+        let client = "test.example";
+        let server = "ca.example.com";
+        let paths = CertPaths::resolve(&server, &client, None, None, None, None, None);
+        assert_eq!(paths.key_path, Path::new("./test.example.key"));
+        assert_eq!(paths.csr_path, Path::new("./test.example.csr"));
+        assert_eq!(paths.crt_path, Path::new("./test.example.crt"));
+        assert_eq!(
+            paths.ca_cert_path,
+            Path::new("./certs/ca.example.com.cacert")
+        );
+    }
+
+    #[test]
+    fn test_path_resolve_with_dir() {
+        let client = "test.example";
+        let server = "ca.example.com";
+        let paths = CertPaths::resolve(
+            &server,
+            &client,
+            Some("/secret/data".into()),
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(paths.key_path, Path::new("/secret/data/test.example.key"));
+        assert_eq!(paths.csr_path, Path::new("/secret/data/test.example.csr"));
+        assert_eq!(paths.crt_path, Path::new("/secret/data/test.example.crt"));
+        assert_eq!(
+            paths.ca_cert_path,
+            Path::new("/secret/data/certs/ca.example.com.cacert")
+        );
+    }
+
+    #[test]
+    fn test_path_resolve_with_prefix() {
+        let client = "test.example";
+        let server = "ca.example.com";
+        let paths = CertPaths::resolve(
+            &server,
+            &client,
+            Some("/secret/data".into()),
+            Some("/d/tls.key".into()),
+            Some("/d/tls.csr".into()),
+            Some("/d/tls.crt".into()),
+            Some("/d/ca.crt".into()),
+        );
+        assert_eq!(paths.key_path, Path::new("/d/tls.key"));
+        assert_eq!(paths.csr_path, Path::new("/d/tls.csr"));
+        assert_eq!(paths.crt_path, Path::new("/d/tls.crt"));
+        assert_eq!(paths.ca_cert_path, Path::new("/d/ca.crt"));
     }
 }
