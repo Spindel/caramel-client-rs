@@ -56,7 +56,7 @@ struct CurlReply {
 /// * Passes all `curl::Error` through.
 fn curl_fetch_root_cert(url: &str, mut data: Vec<u8>) -> Result<CurlReply, curl::Error> {
     let mut handle = Easy::new();
-    handle.url(&url)?;
+    handle.url(url)?;
     handle.ssl_verify_host(true)?;
     handle.ssl_verify_peer(true)?;
     handle.ssl_min_max_version(
@@ -171,7 +171,7 @@ fn curl_get_crt(handle: &mut Easy, url: &str) -> Result<CurlReply, curl::Error> 
     // A 4k allocation should be good for this.
     let mut data = Vec::<u8>::with_capacity(4096);
 
-    handle.url(&url)?;
+    handle.url(url)?;
     handle.post(false)?;
     // Start a new block scope here, that allows it to access our buffer `content` exclusive or
     // not, and then we can once more use it after the block scope.
@@ -234,7 +234,7 @@ pub fn get_crt(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertStat
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
     info!("Fetching certificate from '{}'", server);
-    let mut handle = curl_get_handle(&server, &ca_cert)?;
+    let mut handle = curl_get_handle(server, ca_cert)?;
     let get_res = curl_get_crt(&mut handle, &url)?;
     inner_get_crt(&url, get_res)
 }
@@ -250,7 +250,7 @@ fn curl_post_csr(
     mut csr_data: &[u8],
 ) -> Result<CurlReply, curl::Error> {
     use std::io::Read;
-    handle.url(&url)?;
+    handle.url(url)?;
     handle.post(true)?;
     handle.post_field_size(csr_data.len() as u64)?;
 
@@ -328,7 +328,7 @@ pub fn post_csr(server: &str, ca_cert: &Path, csr_data: &[u8]) -> Result<CertSta
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
 
-    let mut handle = curl_get_handle(&server, &ca_cert)?;
+    let mut handle = curl_get_handle(server, ca_cert)?;
 
     info!("Posting CSR to '{}'", server);
     let post_res = curl_post_csr(&mut handle, &url, csr_data)?;
@@ -382,7 +382,7 @@ pub fn post_and_get_crt(
     let hexname = hexsum::sha256hex(csr_data);
     let url = format!("https://{}/{}", server, hexname);
 
-    let mut handle = curl_get_handle(&server, &ca_cert)?;
+    let mut handle = curl_get_handle(server, ca_cert)?;
 
     let mut attempt = 0;
     let mut total_time = Duration::new(0, 0);

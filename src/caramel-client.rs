@@ -205,7 +205,7 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res = network::post_and_get_crt(&self.server, &ca_path, &csr_data, self.timeout);
+        let res = network::post_and_get_crt(&self.server, ca_path, &csr_data, self.timeout);
         let temp_crt = match res {
             Ok(network::CertState::Downloaded(data)) => data,
             Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
@@ -335,7 +335,7 @@ fn certificate_request(
     );
 
     // Create request info
-    let request_info = CertificateRequest::new(&server, &client_id, paths, timeout);
+    let request_info = CertificateRequest::new(server, client_id, paths, timeout);
 
     request_info.ensure_tls_dir()?;
     request_info.ensure_key()?;
@@ -463,10 +463,10 @@ impl CmdArgs {
             log_level,
             timeout,
             tls_dir,
+            cacert_path,
+            cert_path,
             key_path,
             csr_path,
-            cert_path,
-            cacert_path,
         })
     }
 }
@@ -517,7 +517,7 @@ mod test {
         println!("args {:?}", args);
         let mut vec = Vec::with_capacity(10);
         vec.extend_from_slice(&["execname"]);
-        vec.extend_from_slice(&args);
+        vec.extend_from_slice(args);
         println!("vec {:?}", vec);
         CmdArgs::new_from(vec.iter()).unwrap()
     }
@@ -526,7 +526,7 @@ mod test {
         println!("args_optional {:?}", args_optional);
         let mut vec = Vec::with_capacity(10);
         vec.extend_from_slice(&["execname", "server_1", "client_id_1"]);
-        vec.extend_from_slice(&args_optional);
+        vec.extend_from_slice(args_optional);
         println!("vec {:?}", vec);
         CmdArgs::new_from(vec.iter()).unwrap()
     }
@@ -576,7 +576,7 @@ mod test {
     fn test_path_resolve_all_none() {
         let client = "test.example";
         let server = "ca.example.com";
-        let paths = CertPaths::resolve(&server, &client, None, None, None, None, None);
+        let paths = CertPaths::resolve(server, client, None, None, None, None, None);
         assert_eq!(paths.key_path, Path::new("./test.example.key"));
         assert_eq!(paths.csr_path, Path::new("./test.example.csr"));
         assert_eq!(paths.crt_path, Path::new("./test.example.crt"));
@@ -591,8 +591,8 @@ mod test {
         let client = "test.example";
         let server = "ca.example.com";
         let paths = CertPaths::resolve(
-            &server,
-            &client,
+            server,
+            client,
             Some("/secret/data".into()),
             None,
             None,
@@ -613,8 +613,8 @@ mod test {
         let client = "test.example";
         let server = "ca.example.com";
         let paths = CertPaths::resolve(
-            &server,
-            &client,
+            server,
+            client,
             Some("/secret/data".into()),
             Some("/d/tls.key".into()),
             Some("/d/tls.csr".into()),
