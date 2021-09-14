@@ -33,7 +33,7 @@ enum VerifyCertResult {
 /// # Errors
 /// * openssl `ErrorStack` if certificate cannot be loaded or is malformed.
 fn openssl_verify_cacert(ca_cert_data: &[u8]) -> Result<bool, ErrorStack> {
-    let ca_cert = X509::from_pem(&ca_cert_data)?;
+    let ca_cert = X509::from_pem(ca_cert_data)?;
     trace!(target:"openssl", "Use openssl to verify CA certificate: {:?}", ca_cert);
     let pkey = ca_cert.public_key()?;
     let res = ca_cert.verify(&pkey)?;
@@ -73,7 +73,7 @@ pub fn verify_private_key(private_key_data: &[u8]) -> Result<(), CcError> {
     /*
         openssl pkey -noout -in $filename
     */
-    let pkey = match PKey::private_key_from_pem(&private_key_data) {
+    let pkey = match PKey::private_key_from_pem(private_key_data) {
         Ok(c) => c,
         Err(_e) => return Err(CcError::PrivateKeyParseFailure),
     };
@@ -161,7 +161,7 @@ fn workaround_subject() -> (X509Name, X509Name) {
 /// Convert the PEM data in `ca_data` into a certificate, and clone it's subject out.
 /// ^ `ca_data` is CA certificate.
 fn clone_subject(ca_data: &[u8]) -> Result<X509Name, ErrorStack> {
-    let ca_cert = X509::from_pem(&ca_data)?;
+    let ca_cert = X509::from_pem(ca_data)?;
     let mut ca_subject = X509Name::builder()?;
     // From a certificate we cannot get an _owned_ copy of the subject without loading if from a PEM file on disk.
     // This iterates over the subject and copies it element-by-element instead, in order to make
@@ -275,7 +275,7 @@ fn openssl_make_subject(ca_cert_data: &[u8], client_id: &str) -> Result<X509Name
             prefix = '/C=SE/ST=Östergötland/L=Linköping/O=Modio AB/OU=Caramel'
         return '/CN={cn}/{prefix}'.format(prefix=prefix, cn=self.client_id)
     */
-    let subj = get_ca_subject(&ca_cert_data)?;
+    let subj = get_ca_subject(ca_cert_data)?;
     trace!(target:"openssl", "Got ca subject '{:?}'", subj.as_ref());
     let new_subject = make_inner_subject(&subj, client_id)?;
     debug!(target:"openssl", "Created new subject '{:?}'", new_subject.as_ref());
@@ -316,8 +316,8 @@ fn openssl_verify_csr(
     private_key_data: &[u8],
     client_id: &str,
 ) -> Result<VerifyCsrResult, ErrorStack> {
-    let pkey = PKey::private_key_from_pem(&private_key_data)?;
-    let csr = X509Req::from_pem(&csr_data)?;
+    let pkey = PKey::private_key_from_pem(private_key_data)?;
+    let csr = X509Req::from_pem(csr_data)?;
     trace!(target:"openssl", "Verifying CSR against private key");
     let verified = csr.verify(&pkey)?;
     if !verified {
@@ -375,9 +375,9 @@ fn openssl_verify_cert(
     private_key_data: &[u8],
     client_id: &str,
 ) -> Result<VerifyCertResult, ErrorStack> {
-    let private_key = PKey::private_key_from_pem(&private_key_data)?;
-    let ca_cert = X509::from_pem(&ca_cert_data)?;
-    let cert = X509::from_pem(&cert_data)?;
+    let private_key = PKey::private_key_from_pem(private_key_data)?;
+    let ca_cert = X509::from_pem(ca_cert_data)?;
+    let cert = X509::from_pem(cert_data)?;
 
     let cert_pubkey = cert.public_key()?;
     trace!(target:"openssl",
@@ -451,7 +451,7 @@ fn openssl_create_csr(private_key_data: &[u8], subject: &X509Name) -> Result<Vec
 
     let mut req_builder = X509ReqBuilder::new()?;
     req_builder.set_pubkey(&private_key)?;
-    req_builder.set_subject_name(&subject)?;
+    req_builder.set_subject_name(subject)?;
     req_builder.sign(&private_key, MessageDigest::sha256())?;
     let req = req_builder.build();
     let pem = req.to_pem()?;
@@ -522,7 +522,7 @@ pub fn create_csr(
          openssl req  -config cnf.name -sha256 -utf8 -new -key key_file_name -out csr_file_name -subj subject
     */
 
-    let subject = match openssl_make_subject(ca_cert_data, &client_id) {
+    let subject = match openssl_make_subject(ca_cert_data, client_id) {
         Ok(c) => c,
         Err(e) => {
             error!("OpenSSL Error building request: {}", e);
@@ -603,7 +603,7 @@ mod tests {
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
 
-        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
+        let result = verify_csr(&csr, &key, VALID_CLIENT_ID1);
         assert!(result.is_ok());
     }
 
@@ -611,7 +611,7 @@ mod tests {
     fn test_verify_csr_failure() {
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
         let key = create_private_key().unwrap();
-        let result = verify_csr(&csr, &key, &VALID_CLIENT_ID1);
+        let result = verify_csr(&csr, &key, VALID_CLIENT_ID1);
 
         match result {
             Err(e) => assert_eq!(CcError::CsrSignedWithWrongKey, e),
@@ -623,7 +623,7 @@ mod tests {
     fn test_verify_csr_failure_when_clientid_differs() {
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
         let csr = convert_string_to_vec8(VALID_CSR_DATA1);
-        let result = verify_csr(&csr, &key, &OTHER_CLIENT_ID1);
+        let result = verify_csr(&csr, &key, OTHER_CLIENT_ID1);
         match result {
             Err(e) => assert_eq!(CcError::CsrCommonNameMismatch, e),
             Ok(_) => panic!("Should not be ok with client id mismatch"),
@@ -662,7 +662,7 @@ mod tests {
         let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
         let other_key = convert_string_to_vec8(VALID_KEY_DATA2);
 
-        let result = verify_cert(&cert, &ca_cert, &other_key, &VALID_CLIENT_ID1);
+        let result = verify_cert(&cert, &ca_cert, &other_key, VALID_CLIENT_ID1);
         match result {
             Err(e) => assert_eq!(CcError::CertKeyMismatch, e),
             Ok(_) => panic!("Should not be ok with key mismatch"),
@@ -675,7 +675,7 @@ mod tests {
         let ca_cert = convert_string_to_vec8(VALID_CACERT_DATA1);
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
 
-        let result = verify_cert(&cert, &ca_cert, &key, &OTHER_CLIENT_ID1);
+        let result = verify_cert(&cert, &ca_cert, &key, OTHER_CLIENT_ID1);
         match result {
             Err(e) => assert_eq!(CcError::CertCommonNameMismatch, e),
             Ok(_) => panic!("Should not be ok with client id mismatch"),
@@ -688,7 +688,7 @@ mod tests {
         let other_ca_cert = convert_string_to_vec8(WORKAROUND_CACERT);
         let key = convert_string_to_vec8(VALID_KEY_DATA1);
 
-        let result = verify_cert(&cert, &other_ca_cert, &key, &VALID_CLIENT_ID1);
+        let result = verify_cert(&cert, &other_ca_cert, &key, VALID_CLIENT_ID1);
         match result {
             Err(e) => assert_eq!(CcError::CertSignatureInvalid, e),
             Ok(_) => panic!("Should not be ok with key mismatch"),
