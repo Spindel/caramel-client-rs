@@ -437,15 +437,15 @@ impl CmdArgs {
         match matches.occurrences_of("verbosity") {
             0 => {
                 debug!("Info and Error level");
-                log_level = log::LevelFilter::Error
+                log_level = log::LevelFilter::Error;
             }
             1 => {
                 debug!("Debug level");
-                log_level = log::LevelFilter::Debug
+                log_level = log::LevelFilter::Debug;
             }
             _ => {
                 debug!("Trace level");
-                log_level = log::LevelFilter::Trace
+                log_level = log::LevelFilter::Trace;
             }
         }
 
