@@ -33,7 +33,7 @@ exclude = [
 
 [dependencies]
 clap = "2.33"
-curl = "0.4"
+curl = {version = "0.4", features = ["static-ssl", "static-curl"]}
 log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
 rand = "0.7"
