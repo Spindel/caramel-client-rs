@@ -567,7 +567,7 @@ mod tests {
         assert_eq!(Some(CcError::PrivateKeyParseFailure), result.err());
     }
 
-    #[test_env_log::test]
+    #[test_log::test]
     fn test_accept_valid_cacert() {
         let valid_cacert = convert_string_to_vec8(VALID_CACERT_DATA1);
         let result = verify_cacert(&valid_cacert);
