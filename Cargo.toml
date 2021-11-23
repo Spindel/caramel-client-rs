@@ -36,7 +36,7 @@ clap = "2.33"
 curl = {version = "^0.4.41", features = ["static-ssl", "static-curl"]}
 log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
-rand = "0.7"
+rand = "0.8"
 sha2 = "0.9"
 simple_logger = "1.9"
 thiserror = "1.0"
