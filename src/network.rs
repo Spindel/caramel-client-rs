@@ -593,7 +593,7 @@ mod integration {
     fn get_cacert_from_log_ca() {
         // ca.log.modio.se runs on a publicly signed PKI
         let res = fetch_root_cert("ca.log.modio.se");
-        assert!(res.is_ok());
+        res.expect("Failed to download cert from ca.log.modio.se");
     }
 
     #[test]
