@@ -33,18 +33,18 @@ exclude = [
 
 [dependencies]
 clap = "2.33"
-curl = {version = "0.4", features = ["static-ssl", "static-curl"]}
+curl = {version = "^0.4.41", features = ["static-ssl", "static-curl"]}
 log = "0.4"
 openssl = {version = "0.10", features = ["vendored"]}
-rand = "0.7"
+rand = "0.8"
 sha2 = "0.9"
-simple_logger = "1.9"
+simple_logger = "1.13"
 thiserror = "1.0"
 
 [dev-dependencies]
-env_logger = "0.7"
-test-env-log = "0.2"
-tracing-subscriber = {version = "0.2", features = ["chrono", "env-filter", "fmt"]}
+env_logger = "0.9"
+test-log = "0.2"
+tracing-subscriber = {version = "0.3", features = ["env-filter", "fmt"]}
 
 [[bin]]
 name = "caramel-client-rs"
