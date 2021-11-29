@@ -45,6 +45,27 @@ crosscompile:
     - cargo build --target x86_64-unknown-linux-musl
     - cargo build --target armv7-unknown-linux-gnueabihf
 
+# Split check & fmt as two different jobs only so that we don't error early in
+# case one of them fails
+rebase:
+  extends: .rebase
+  needs:
+    - job: lint:normal
+      artifacts: false
+  variables:
+    # Make sure that git also fetches origin/master
+    GIT_FETCH_EXTRA_FLAGS: master
+  parallel:
+    matrix:
+      - RUN_COMMAND:
+          - cargo check
+          - cargo fmt -- --check
+          - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
+          - cargo doc --no-deps -p caramel-client
+  script:
+    - git every -x '${RUN_COMMAND}'
+
+
 .release:
   rules:
     # Build containers & release
@@ -137,27 +158,6 @@ release:final:
                   --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${X86_STATIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${X86_STATIC}-caramel-client-rs\"   }" \
                   --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${X86_DYNAMIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${X86_DYNAMIC}-caramel-client-rs\" }" \
                   --assets-link "{\"name\":  \"caramel-client-rs-${CI_COMMIT_TAG}-${ARMV7_DYNAMIC}\",  \"url\":  \"${PACKAGE_REGISTRY_URL}/${ARMV7_DYNAMIC}-caramel-client-rs\"}"
-
-
-# Split check & fmt as two different jobs only so that we don't error early in
-# case one of them fails
-rebase:
-  extends: .rebase
-  needs:
-    - job: lint:normal
-      artifacts: false
-  variables:
-    # Make sure that git also fetches origin/master
-    GIT_FETCH_EXTRA_FLAGS: master
-  parallel:
-    matrix:
-      - RUN_COMMAND:
-          - cargo check
-          - cargo fmt -- --check
-          - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
-          - cargo doc --no-deps -p caramel-client
-  script:
-    - git every -x '${RUN_COMMAND}'
 
 
 # This is to publish the documentation to external site
