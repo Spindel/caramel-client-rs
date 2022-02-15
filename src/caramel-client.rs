@@ -502,7 +502,7 @@ fn main() {
     );
 
     if res.is_err() {
-        eprintln!("{}", res.unwrap_err().to_string());
+        eprintln!("{}", res.unwrap_err());
         std::process::exit(1);
     } else {
         info!("Certificate success");
