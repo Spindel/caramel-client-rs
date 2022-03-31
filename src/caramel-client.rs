@@ -433,21 +433,21 @@ impl CmdArgs {
 
         // Vary the output based on how many times the user used the "verbose" flag
         // (i.e. 'myprog -v -v -v' or 'myprog -vvv' vs 'myprog -v'
-        let log_level: log::LevelFilter;
-        match matches.occurrences_of("verbosity") {
+
+        let log_level = match matches.occurrences_of("verbosity") {
             0 => {
                 debug!("Info and Error level");
-                log_level = log::LevelFilter::Error;
+                log::LevelFilter::Error
             }
             1 => {
                 debug!("Debug level");
-                log_level = log::LevelFilter::Debug;
+                log::LevelFilter::Debug
             }
             _ => {
                 debug!("Trace level");
-                log_level = log::LevelFilter::Trace;
+                log::LevelFilter::Trace
             }
-        }
+        };
 
         let timeout = Duration::from_secs(value_t!(matches, "timeout", u64).unwrap());
 
