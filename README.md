@@ -74,10 +74,10 @@ The following checks are run by the CI pipeline:
  - cargo clippy --tests -- -D clippy::pedantic -D clippy::cargo
  - cargo fmt
 
-You can use the alias below to rebase your changes ontop remote master.
+You can use the alias below to rebase your changes ontop remote main.
 The alias is similar to what is used by the CI pipeline.
 
-    # git config alias.every "rebase -x 'git --no-pager log --oneline --max-count=1' --rebase-merges --autosquash origin/master"
+    # git config alias.every "rebase -x 'git --no-pager log --oneline --max-count=1' --rebase-merges --autosquash origin/main"
 
 The alias can be used as:
 
@@ -86,7 +86,7 @@ The alias can be used as:
 
 where `<COMMIT>` is the commit with your changes.
 
-Check the [.gitlab-ci.yml](https://gitlab.com/ModioAB/caramel-client-rs/-/blob/master/.gitlab-ci.yml) file for more details.
+Check the [.gitlab-ci.yml](https://gitlab.com/ModioAB/caramel-client-rs/-/blob/main/.gitlab-ci.yml) file for more details.
 
 ### Visual Studio Code setup
 
@@ -246,5 +246,5 @@ key-chains or per-application databases.
 
 ## Using the container
 
-    # podman pull registry.gitlab.com/modioab/caramel-client-rs/client:master
-    # podman run -ti --rm=true -v $(pwd):/data:rw registry.gitlab.com/modioab/caramel-client-rs/client:master CA.EXAMPLE.COM  TEST-CERTIFICATE-PLEASE-IGNORE
+    # podman pull registry.gitlab.com/modioab/caramel-client-rs/client:latest
+    # podman run -ti --rm=true -v $(pwd):/data:rw registry.gitlab.com/modioab/caramel-client-rs/client:latest CA.EXAMPLE.COM  TEST-CERTIFICATE-PLEASE-IGNORE
