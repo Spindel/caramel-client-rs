@@ -132,7 +132,7 @@ release:container:
 
 release:upload:
   extends: .relvars
-  image: curlimages/curl:latest
+  image: docker.io/curlimages/curl:latest
   stage: deploy
   dependencies:
     - release
