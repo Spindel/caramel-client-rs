@@ -53,8 +53,8 @@ rebase:
     - job: lint:normal
       artifacts: false
   variables:
-    # Make sure that git also fetches origin/master
-    GIT_FETCH_EXTRA_FLAGS: master
+    # Make sure that git also fetches origin/main
+    GIT_FETCH_EXTRA_FLAGS: $CI_DEFAULT_BRANCH
   parallel:
     matrix:
       - RUN_COMMAND:
