@@ -18,7 +18,7 @@ include:
 default:
   # We use a slightly modified `rust:latest` image
   # See https://gitlab.com/ModioAB/base-image/-/tree/master/rust  for details
-  image: registry.gitlab.com/modioab/base-image/debian/rust:master
+  image: registry.gitlab.com/modioab/base-image/debian/rust:latest
 
 variables:
   PACKAGENAME: caramel-client
@@ -171,7 +171,7 @@ pages:
   stage: deploy
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      # only run on master
+      # only run on default branch
       when: on_success
     - when: never
   script:
