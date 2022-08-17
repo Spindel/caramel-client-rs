@@ -35,7 +35,7 @@ TdnsVmkvlgUQop1CsdXfhcEtt5AzfuvgNBrpUPgRs6IVyHF6N9o90d/7YwLxlvEX
 kVDsWYTe/wk=
 -----END CERTIFICATE REQUEST-----
 ";
-        let out = sha256hex(&CSR_DATA.as_bytes().to_vec());
+        let out = sha256hex(CSR_DATA.as_bytes());
         assert_eq!(
             out,
             "3f6edb2595850495f9f15214018aee629af959c68f72b331f15d40e8daaa81ed"
