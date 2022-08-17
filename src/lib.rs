@@ -8,7 +8,7 @@
 pub mod certs;
 pub mod network;
 
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 /// Enum `CcError` used for library error replies.
 pub enum CcError {
     // certs.rs errors
