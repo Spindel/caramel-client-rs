@@ -33,7 +33,7 @@ impl From<curl::Error> for CcError {
 /// Pending: data has been posted to the server, but there is no signed certificate to fetch.
 /// Rejected: Server has rejected our certificate, thus our key and csr are invalid and we should regenerate them.
 /// Downloaded: We got a certificate from the server that can be used.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CertState {
     Pending,
     Rejected,
