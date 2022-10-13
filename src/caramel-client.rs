@@ -197,7 +197,7 @@ impl CertificateRequest {
     ///
     /// # Errors
     /// * `String` on errors.
-    pub fn ensure_crt(&self) -> Result<(), String> {
+    pub fn ensure_crt(&self) -> Result<(), CcError> {
         let ca_path = self.ca_cert_file.as_path();
         let crt_path = self.crt_file.as_path();
         let csr_path = self.csr_file.as_path();
@@ -205,29 +205,21 @@ impl CertificateRequest {
 
         let csr_data = std::fs::read(&csr_path).unwrap();
 
-        let res = network::post_and_get_crt(&self.server, ca_path, &csr_data, self.timeout);
+        let res = network::post_and_get_crt(&self.server, ca_path, &csr_data, self.timeout)?;
         let temp_crt = match res {
-            Ok(network::CertState::Downloaded(data)) => data,
-            Ok(network::CertState::Pending) => panic!("Not implemented, pending signature"),
-            Ok(network::CertState::Rejected) => panic!("Not implemented, delete rejected crt/key"),
-            Ok(network::CertState::NotFound) => panic!(
-                "Not found is not supposed to happen. Has CSR really been POST-ed and accepted?"
-            ),
-            Err(e) => panic!("Unknown error. cannot cope: {}", e),
+            network::CertState::Downloaded(data) => data,
+            network::CertState::Pending => return Err(CcError::CsrPending),
+            network::CertState::Rejected => {
+                return Err(CcError::CsrRejected(self.csr_file.display().to_string()))
+            }
+            network::CertState::NotFound => return Err(CcError::NotFound),
         };
 
         debug!("Verifying certificate received from '{}'", &self.server);
         let ca_cert_data = std::fs::read(&ca_path).unwrap();
         let key_data = std::fs::read(&key_path).unwrap();
-        let valid = certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id);
-        if valid.is_err() {
-            error!(
-                "Invalid certificate received from '{}'\n {:?}",
-                &self.server, valid
-            );
-            let err_msg = format!("Invalid certificate received from '{}'", &self.server);
-            return Err(err_msg);
-        }
+
+        certs::verify_cert(&temp_crt, &ca_cert_data, &key_data, &self.client_id)?;
 
         if crt_path.exists() {
             let cert_data = std::fs::read(&crt_path).unwrap();
