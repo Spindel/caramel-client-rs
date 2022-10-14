@@ -66,6 +66,12 @@ pub enum CcError {
     #[error("Unable to receive CRT within timeout, time spent {total_time:} seconds")]
     CrtTimeout { total_time: u64 },
 
+    #[error("Server rejected CSR (Certificate Signing Request). Delete {0} and .key")]
+    CsrRejected(String),
+
+    #[error("Waiting for server to sign the certificate")]
+    CsrPending,
+
     // network.rs errors
     #[error("Unable to download certificate")]
     DownloadCertificateFailure,

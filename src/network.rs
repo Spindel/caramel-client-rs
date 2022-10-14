@@ -6,7 +6,7 @@
 mod hexsum;
 
 use curl::easy::Easy;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use rand::prelude::*;
 use std::path::Path;
 use std::time::Duration;
@@ -202,17 +202,27 @@ fn inner_get_crt(url: &str, res: CurlReply) -> Result<CertState, CcError> {
         202 | 304 => Ok(CertState::Pending),
         404 => Ok(CertState::NotFound),
         403 => {
-            warn!(
-                "Rejected CSR from server when fetching '{}':\n {:?}",
-                url, res.data
+            let errmsg = match std::str::from_utf8(&res.data) {
+                Ok(msg) => msg,
+                _ => "Unknown reason",
+            };
+
+            error!(
+                "Rejected CSR from server when fetching '{}':\n {}",
+                url, errmsg,
             );
             Ok(CertState::Rejected)
         }
         _ => {
-            error!(
-                "Error from server when fetching '{}':\n {:?}",
-                url, res.data
-            );
+            if let Ok(msg) = std::str::from_utf8(&res.data) {
+                error!("Error from server when fetching '{}':\n {:?}", url, msg);
+            } else {
+                error!(
+                    "Error from server when fetching '{}':\n {:?}",
+                    url, res.data
+                );
+            };
+
             Err(CcError::Network)
         }
     }
